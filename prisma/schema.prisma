@@ -1,0 +1,155 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../node_modules/.prisma/client" // Default output location
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // Ensure this matches your Supabase DB URL or other Postgres instance
+}
+
+// --- Core Data Models ---
+
+// Link to Supabase Auth users - Assumes handle_new_user trigger exists in DB
+model UserProfile {
+  id        String    @id // This MUST match the UUID from auth.users
+  email     String?   @unique
+  fullName  String?   @map("full_name")
+  createdAt DateTime? @default(now()) @map("created_at")
+
+  // User settings embedded here for simplicity, or could be a separate table
+  preferences     Json?     @default("{}") // General UI/backend preferences
+  savedPrompts    Json?     @default("[]") // Array of {id: string, name: string, prompt: string}
+  maxSnapshots    Int?      @default(50) @map("max_snapshots") // Example setting
+
+  // Relations
+  workflows   Workflow[]  @relation("UserWorkflows")
+  executions  Execution[] @relation("UserExecutions")
+  snapshots   Snapshot[]  @relation("UserSnapshots")
+
+  @@map("user_profiles")
+}
+
+model Model {
+  id                         String    @id @default(uuid())
+  name                       String    @unique // User-facing e.g., "GPT-4 Turbo"
+  provider                   String?   // e.g., "OpenAI", "Anthropic"
+  modelIdentifierForFlowise  String    @unique @map("model_identifier_for_flowise") // Critical: e.g., "gpt-4-turbo-preview"
+  contextLength              Int?      @map("context_length")
+  configDefaults             Json?     @map("config_defaults") // e.g., { "temperature": 0.7 }
+  createdAt                  DateTime? @default(now()) @map("created_at")
+
+  // Relations
+  stages Stage[] @relation("ModelStages")
+
+  @@map("models")
+}
+
+model Workflow {
+  id          String      @id @default(uuid())
+  userId      String      @map("user_id")
+  name        String
+  description String?
+  metadata    Json?       // e.g., { "tags": ["summarization"], "version": 1 }
+  createdAt   DateTime?   @default(now()) @map("created_at")
+  updatedAt   DateTime?   @updatedAt @map("updated_at")
+
+  // Relations
+  user        UserProfile @relation("UserWorkflows", fields: [userId], references: [id], onDelete: Cascade)
+  stages      Stage[]     @relation("WorkflowStages")
+  executions  Execution[] @relation("WorkflowExecutions")
+  snapshots   Snapshot[]  @relation("WorkflowSnapshots") // Snapshots deleted if workflow is deleted
+
+  @@map("workflows")
+}
+
+model Stage {
+  id                    String    @id @default(uuid())
+  workflowId            String    @map("workflow_id")
+  userId                String    @map("user_id") // Denormalized for simpler RLS/checks
+  stageOrder            Int       @map("stage_order")
+  name                  String?   // User-friendly stage name
+  promptTemplate        String?   @db.Text @map("prompt_template")
+  modelId               String?   @map("model_id")
+  validationType        String?   @default("none") @map("validation_type") // 'none', 'manual', 'regex', 'function', 'llm'(future)
+  validationCriteria    Json?     @map("validation_criteria") // e.g., { "pattern": "..." }, { "functionName": "..." }
+  outputVariables       Json?     @map("output_variables") // Defines expected output structure { "key": "type" }
+  inputVariableMapping  Json?     @map("input_variable_mapping") // Maps stage inputs { "promptVar": "source.path" }
+  retryLimit            Int?      @default(0) @map("retry_limit")
+  nextStageOnPass       Int?      @map("next_stage_on_pass") // Target stage_order
+  nextStageOnFail       Int?      @map("next_stage_on_fail") // Target stage_order
+  flowiseConfig         Json?     @map("flowise_config") // Overrides for Flowise call
+  createdAt             DateTime? @default(now()) @map("created_at")
+
+  // Relations
+  workflow              Workflow     @relation("WorkflowStages", fields: [workflowId], references: [id], onDelete: Cascade)
+  model                 Model?       @relation("ModelStages", fields: [modelId], references: [id], onDelete: SetNull) // Model deletion shouldn't break stages
+  executionLogs         ExecutionLog[] @relation("StageExecutionLogs") // Removed onDelete from here, it's on ExecutionLog.stage
+
+  @@unique([workflowId, stageOrder])
+  @@map("stages")
+}
+
+model Execution {
+  id                  String      @id @default(uuid())
+  workflowId          String      @map("workflow_id")
+  userId              String      @map("user_id")
+  status              String      @default("pending") // 'pending', 'running', 'completed', 'failed', 'paused'
+  executionInputs     Json?       @map("execution_inputs") // Initial inputs for the entire run
+  currentStageOrder   Int?        @map("current_stage_order")
+  executionContext    Json?       @default("{}") @map("execution_context") // Stores outputs from completed stages { "stage_1": { "output": {...} } }
+  startedAt           DateTime?   @default(now()) @map("started_at")
+  completedAt         DateTime?   @map("completed_at")
+
+  // Relations
+  workflow            Workflow     @relation("WorkflowExecutions", fields: [workflowId], references: [id], onDelete: Cascade)
+  user                UserProfile  @relation("UserExecutions", fields: [userId], references: [id], onDelete: Cascade)
+  executionLogs       ExecutionLog[] @relation("ExecutionExecutionLogs") // Logs deleted if execution is deleted
+
+  @@index([userId, status]) // Index for fetching user's active/completed runs
+  @@map("executions")
+}
+
+model ExecutionLog {
+  id                String      @id @default(uuid())
+  executionId       String      @map("execution_id")
+  stageId           String      @map("stage_id") // Link to the specific stage definition used
+  userId            String      @map("user_id") // Denormalized
+  stageOrder        Int         @map("stage_order") // Denormalized
+  attemptNumber     Int         @default(1) @map("attempt_number")
+  inputs            Json?       // Actual inputs for this specific attempt
+  promptSent        String?     @db.Text @map("prompt_sent") // For debugging
+  rawOutput         String?     @db.Text @map("raw_output")
+  parsedOutput      Json?       @map("parsed_output")
+  validationResult  String?     @default("pending") @map("validation_result") // 'pending', 'pass', 'fail', 'error'
+  validatorNotes    String?     @map("validator_notes")
+  errorMessage      String?     @map("error_message")
+  executedAt        DateTime?   @default(now()) @map("executed_at")
+  durationMs        Int?        @map("duration_ms")
+
+  // Relations
+  execution         Execution    @relation("ExecutionExecutionLogs", fields: [executionId], references: [id], onDelete: Cascade)
+  stage             Stage        @relation("StageExecutionLogs", fields: [stageId], references: [id], onDelete: Cascade) // Cascade delete seems reasonable here
+
+  @@index([executionId, stageOrder, attemptNumber]) // Index for retrieving logs for a run
+  @@map("execution_logs")
+}
+
+model Snapshot {
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  name              String
+  description       String?
+  type              String    @default("workflow") // Currently only 'workflow'
+  sourceWorkflowId  String?   @map("source_workflow_id")
+  snapshotData      Json      @map("snapshot_data") // JSON containing { workflow: {...}, stages: [{...}] }
+  createdAt         DateTime? @default(now()) @map("created_at")
+
+  // Relations
+  user              UserProfile @relation("UserSnapshots", fields: [userId], references: [id], onDelete: Cascade)
+  workflow          Workflow?   @relation("WorkflowSnapshots", fields: [sourceWorkflowId], references: [id], onDelete: SetNull)
+
+  @@map("snapshots")
+}
