@@ -6,12 +6,15 @@ import {
     startWorkflowExecution,
     fetchExecutions,
     fetchExecutionLogs,
-    // Import other API functions as needed (createWorkflow, updateWorkflow, etc.)
+    updateWorkflow, // Added
+    deleteWorkflow, // Added
+    updateStage,    // Added
+    deleteStage,    // Added
     WorkflowSummary,
     WorkflowDetail,
+    StageDetail,    // Added
     ExecutionSummary,
     ExecutionLog,
-    // Import other interfaces as needed
 } from '@/services/apiClient'; // Adjust path if needed
 
 // Define query keys for workflow-related data
@@ -51,6 +54,96 @@ export function useGetWorkflowDetail(workflowId: string | null | undefined) {
         queryFn: () => fetchWorkflowDetail(workflowId!),
         enabled: !!workflowId, // Only run the query if workflowId is a truthy value (not null, undefined, or empty string)
         staleTime: 10 * 60 * 1000, // Example: Details might be fresher longer
+    });
+}
+
+// Hook for updating workflow metadata (Mutation)
+export function useUpdateWorkflow() {
+    const queryClient = useQueryClient();
+    return useMutation<
+        WorkflowDetail, // Return type
+        Error,          // Error type
+        { workflowId: string; data: Partial<Pick<WorkflowDetail, 'name' | 'description' | 'globalInputSchema'>> } // Input variables
+    >({
+        mutationFn: ({ workflowId, data }) => updateWorkflow(workflowId, data),
+        onSuccess: (updatedWorkflow) => {
+            console.log('Workflow updated successfully:', updatedWorkflow);
+            // Invalidate both the list and the specific detail query
+            queryClient.invalidateQueries({ queryKey: workflowKeys.lists() });
+            queryClient.invalidateQueries({ queryKey: workflowKeys.detail(updatedWorkflow.id) });
+            // Optionally update the cache directly
+            queryClient.setQueryData(workflowKeys.detail(updatedWorkflow.id), updatedWorkflow);
+        },
+        onError: (error, variables) => {
+            console.error(`Error updating workflow ${variables.workflowId}:`, error);
+            // Add user feedback (e.g., toast)
+        },
+    });
+}
+
+// Hook for deleting a workflow (Mutation)
+export function useDeleteWorkflow() {
+    const queryClient = useQueryClient();
+    return useMutation<
+        void,           // Return type (usually void for delete)
+        Error,          // Error type
+        string          // Input variable (workflowId)
+    >({
+        mutationFn: (workflowId) => deleteWorkflow(workflowId),
+        onSuccess: (_, workflowId) => {
+            console.log(`Workflow ${workflowId} deleted successfully`);
+            // Invalidate the workflow list
+            queryClient.invalidateQueries({ queryKey: workflowKeys.lists() });
+            // Remove the deleted workflow's detail from cache if it exists
+            queryClient.removeQueries({ queryKey: workflowKeys.detail(workflowId) });
+        },
+        onError: (error, workflowId) => {
+            console.error(`Error deleting workflow ${workflowId}:`, error);
+            // Add user feedback
+        },
+    });
+}
+
+// Hook for updating stage details (Mutation)
+export function useUpdateStage() {
+    const queryClient = useQueryClient();
+    return useMutation<
+        StageDetail,    // Return type
+        Error,          // Error type
+        { workflowId: string; stageId: string; data: Partial<Omit<StageDetail, 'id' | 'workflowId' | 'userId' | 'createdAt' | 'updatedAt'>> } // Input variables
+    >({
+        mutationFn: ({ workflowId, stageId, data }) => updateStage(workflowId, stageId, data),
+        onSuccess: (updatedStage, variables) => {
+            console.log(`Stage ${variables.stageId} updated successfully:`, updatedStage);
+            // Invalidate the parent workflow's detail query to refetch stages
+            queryClient.invalidateQueries({ queryKey: workflowKeys.detail(variables.workflowId) });
+            // Optionally update the stage within the workflow detail cache directly (more complex)
+        },
+        onError: (error, variables) => {
+            console.error(`Error updating stage ${variables.stageId} in workflow ${variables.workflowId}:`, error);
+            // Add user feedback
+        },
+    });
+}
+
+// Hook for deleting a stage (Mutation)
+export function useDeleteStage() {
+    const queryClient = useQueryClient();
+    return useMutation<
+        void,           // Return type
+        Error,          // Error type
+        { workflowId: string; stageId: string } // Input variables
+    >({
+        mutationFn: ({ workflowId, stageId }) => deleteStage(workflowId, stageId),
+        onSuccess: (_, variables) => {
+            console.log(`Stage ${variables.stageId} deleted successfully from workflow ${variables.workflowId}`);
+            // Invalidate the parent workflow's detail query to refetch stages
+            queryClient.invalidateQueries({ queryKey: workflowKeys.detail(variables.workflowId) });
+        },
+        onError: (error, variables) => {
+            console.error(`Error deleting stage ${variables.stageId} from workflow ${variables.workflowId}:`, error);
+            // Add user feedback
+        },
     });
 }
 

@@ -6,12 +6,23 @@ import { StageController } from '@/components/workflows/StageController'; // Adj
 import { HybridThinkDrawer } from '@/components/workflows/HybridThinkDrawer'; // Import the new drawer
 import { GhostOverlay } from '@/components/workflows/GhostOverlay'; // Import the new overlay
 import GlobalLayout from '@/components/layout/GlobalLayout'; // Adjust import path if needed
-// Remove mock data import
-// import { mockWorkflowStages, MockStage } from '@/data/mockWorkflows'; // Adjust import path if needed
 import { StageCard } from '@/components/workflows/StageCard'; // Adjust import path if needed
-import { useGetWorkflows } from '@/hooks/api/workflows'; // Import the hook to fetch workflows
+import { useGetWorkflows, useDeleteWorkflow } from '@/hooks/api/workflows'; // Import the hook to fetch and delete workflows
 import { useWorkflowStore } from '@/store/workflowStore'; // Import the Zustand store
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading state
+import { Button } from '@/components/ui/button'; // Import Button
+import { Trash2 } from 'lucide-react'; // Import Trash icon
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'; // Import AlertDialog for confirmation
+import { useToast } from '@/components/ui/use-toast'; // Import useToast for feedback
 
 // Define a type for the workflow data expected from the API
 // Adjust this based on the actual API response structure
@@ -24,26 +35,62 @@ interface ApiWorkflow {
 
 // Internal WorkflowExplorer component for this page
 const WorkflowExplorer = () => {
-  // Fetch workflows using the custom hook
-  const { data: workflows, isLoading, error } = useGetWorkflows();
-  // Get the state setter from the Zustand store
+  const { data: workflows, isLoading, error, refetch } = useGetWorkflows();
   const setActiveWorkflowId = useWorkflowStore((state) => state.setActiveWorkflowId);
+  const { toast } = useToast();
 
-  // Updated click handler to use the global store
+  // State for delete confirmation
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [workflowToDelete, setWorkflowToDelete] = useState<string | null>(null);
+
+  // Mutation hook for deleting workflows
+  const { mutate: deleteWorkflow, isPending: isDeleting } = useDeleteWorkflow();
+
   const handleStageClick = (workflowId: string) => {
     console.log(`Workflow selected: ${workflowId}. Updating global state.`);
     setActiveWorkflowId(workflowId);
-    // Navigation or other actions might happen here in the future
   };
 
-  // Handle loading state
+  // Handler to open delete confirmation
+  const handleDeleteClick = (workflowId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent card click when clicking delete button
+    setWorkflowToDelete(workflowId);
+    setIsDeleteDialogOpen(true);
+  };
+
+  // Handler to confirm deletion
+  const handleConfirmDelete = () => {
+    if (workflowToDelete) {
+      deleteWorkflow(workflowToDelete, {
+        onSuccess: () => {
+          toast({
+            title: 'Workflow Deleted',
+            description: `Workflow has been successfully deleted.`,
+          });
+          setIsDeleteDialogOpen(false);
+          setWorkflowToDelete(null);
+          // Optionally refetch or invalidate queries here if not handled by the hook
+          // refetch(); // Or use queryClient.invalidateQueries(['workflows'])
+        },
+        onError: (err) => {
+          toast({
+            title: 'Error Deleting Workflow',
+            description: (err as Error)?.message || 'Could not delete the workflow.',
+            variant: 'destructive',
+          });
+          setIsDeleteDialogOpen(false);
+          setWorkflowToDelete(null);
+        },
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-3">
         <p className="text-sm text-muted-foreground mb-2">
           Loading workflows...
         </p>
-        {/* Show skeleton loaders */}
         {[...Array(3)].map((_, index) => (
           <Skeleton key={index} className="h-20 w-full rounded-md" />
         ))}
@@ -51,7 +98,6 @@ const WorkflowExplorer = () => {
     );
   }
 
-  // Handle error state
   if (error) {
     return (
       <div className="p-4 bg-destructive/10 border border-destructive text-destructive rounded-md">
@@ -61,39 +107,61 @@ const WorkflowExplorer = () => {
     );
   }
 
-  // Handle case where data is successfully fetched but empty
   if (!workflows || workflows.length === 0) {
     return (
       <div className="p-4 bg-secondary rounded-md text-secondary-foreground">
         <p>No workflows found.</p>
-        {/* Optionally add a button or link to create a new workflow */}
       </div>
     );
   }
 
-  // Render the list of workflows fetched from the API
   return (
-    <div className="space-y-3"> {/* Use space-y for vertical spacing */}
+    <div className="space-y-3">
       <p className="text-sm text-muted-foreground mb-2">
         Select a workflow below to view its details or run it.
       </p>
 
-      {/* Render the list of stages from API data */}
       {workflows.map((workflow: ApiWorkflow) => (
-        <StageCard
-          key={workflow.id}
-          // Adapt props based on your StageCard component and ApiWorkflow type
-          stage={{ // Assuming StageCard expects an object with id, name, description
-            id: workflow.id,
-            name: workflow.name,
-            description: workflow.description || 'No description available.',
-            // Map other necessary fields if your StageCard requires them
-          }}
-          onClick={() => handleStageClick(workflow.id)} // Pass workflow ID to handler
-        />
+        <div key={workflow.id} className="relative group">
+          <StageCard
+            stage={{
+              id: workflow.id,
+              name: workflow.name,
+              description: workflow.description || 'No description available.',
+            }}
+            onClick={() => handleStageClick(workflow.id)}
+          />
+          {/* Delete Button - appears on hover or focus */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
+            onClick={(e) => handleDeleteClick(workflow.id, e)}
+            aria-label={`Delete workflow ${workflow.name}`}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
       ))}
 
-      {/* Placeholder feedback area removed - state is now global */}
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              workflow and all associated executions and snapshots.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setWorkflowToDelete(null)}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} disabled={isDeleting}>
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -1,13 +1,16 @@
 // src/components/workflows/StageCard.tsx
 import React from 'react';
+// Update MockStage import to use actual API type if available, e.g., StageSummary
 import { MockStage } from '@/data/mockWorkflows'; // Adjust import path if needed
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"; // Assuming shadcn/ui
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Assuming shadcn/ui
-import { CheckCircle, AlertCircle, Loader, XCircle, ArrowRightCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button'; // Import Button
+import { CheckCircle, AlertCircle, Loader, XCircle, ArrowRightCircle, Trash2 } from 'lucide-react'; // Import Trash2
 
 interface StageCardProps {
-  stage: MockStage;
+  stage: MockStage; // TODO: Replace MockStage with actual StageSummary/StageDetail type from API
   onClick: (stageId: string) => void; // Function to call when card is clicked
+  onDelete?: (stageId: string, event: React.MouseEvent) => void; // Optional delete handler
 }
 
 // Helper function to get the appropriate status icon and styling
@@ -21,13 +24,19 @@ const getStatusIndicator = (status: MockStage['status']) => {
   }
 };
 
-export const StageCard: React.FC<StageCardProps> = ({ stage, onClick }) => {
+export const StageCard: React.FC<StageCardProps> = ({ stage, onClick, onDelete }) => {
+  const handleDeleteClick = (event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent card click
+    onDelete?.(stage.id, event);
+  };
+
   return (
     <TooltipProvider delayDuration={300}>
       <Tooltip>
         <TooltipTrigger asChild>
+          {/* Added relative positioning and group class */}
           <Card
-            className="cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            className="relative group cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             onClick={() => onClick(stage.id)}
             onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick(stage.id)} // Basic accessibility
             tabIndex={0} // Make it focusable
@@ -43,6 +52,18 @@ export const StageCard: React.FC<StageCardProps> = ({ stage, onClick }) => {
                 Type: {stage.type}
               </CardDescription>
             </CardHeader>
+            {/* Delete Button - Conditionally rendered */}
+            {onDelete && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-10" // Adjusted position and size
+                onClick={handleDeleteClick}
+                aria-label={`Delete stage ${stage.name}`}
+              >
+                <Trash2 className="h-3.5 w-3.5 text-destructive" /> {/* Adjusted icon size */} 
+              </Button>
+            )}
           </Card>
         </TooltipTrigger>
         <TooltipContent side="right" align="start" className="max-w-xs text-sm">

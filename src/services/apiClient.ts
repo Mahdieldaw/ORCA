@@ -178,13 +178,52 @@ export const fetchExecutionLogs = async (executionId: string): Promise<Execution
     return response.data;
 };
 
-// Add functions for:
-// - createWorkflow(data: Omit<WorkflowDetail, 'id' | 'userId' | 'createdAt' | 'updatedAt' | 'stages'>): Promise<WorkflowDetail>
-// - updateWorkflow(workflowId: string, data: Partial<WorkflowDetail>): Promise<WorkflowDetail>
-// - deleteWorkflow(workflowId: string): Promise<void>
-// - createStage(workflowId: string, data: Omit<StageDetail, 'id' | 'workflowId' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<StageDetail>
-// - updateStage(stageId: string, data: Partial<StageDetail>): Promise<StageDetail>
-// - deleteStage(stageId: string): Promise<void>
+// Update workflow metadata
+export const updateWorkflow = async (workflowId: string, data: Partial<Pick<WorkflowDetail, 'name' | 'description' | 'globalInputSchema'>>): Promise<WorkflowDetail> => {
+    console.log(`Updating workflow ${workflowId} with data:`, data);
+    const response = await apiClient.put(`/workflows/${workflowId}`, data);
+    return response.data;
+};
+
+// Delete a workflow
+export const deleteWorkflow = async (workflowId: string): Promise<void> => {
+    console.log(`Deleting workflow ${workflowId}`);
+    await apiClient.delete(`/workflows/${workflowId}`);
+};
+
+// Update stage details
+export const updateStage = async (workflowId: string, stageId: string, data: Partial<Omit<StageDetail, 'id' | 'workflowId' | 'userId' | 'createdAt' | 'updatedAt'>>): Promise<StageDetail> => {
+    console.log(`Updating stage ${stageId} in workflow ${workflowId} with data:`, data);
+    const response = await apiClient.put(`/workflows/${workflowId}/stages/${stageId}`, data);
+    return response.data;
+};
+
+// Delete a stage
+export const deleteStage = async (workflowId: string, stageId: string): Promise<void> => {
+    console.log(`Deleting stage ${stageId} from workflow ${workflowId}`);
+    await apiClient.delete(`/workflows/${workflowId}/stages/${stageId}`);
+};
+
+// Record manual validation result for a stage
+export const recordManualValidation = async (executionId: string, stageId: string, result: 'pass' | 'fail'): Promise<ExecutionLog> => {
+    console.log(`Recording manual validation for stage ${stageId} in execution ${executionId}: ${result}`);
+    const response = await apiClient.post(`/executions/${executionId}/stages/${stageId}/validate`, { result });
+    return response.data; // Assuming the API returns the updated ExecutionLog
+};
+
+// Retry a failed stage
+export const retryStage = async (executionId: string, stageId: string): Promise<ExecutionLog> => {
+    console.log(`Retrying stage ${stageId} in execution ${executionId}`);
+    const response = await apiClient.post(`/executions/${executionId}/stages/${stageId}/retry`);
+    return response.data; // Assuming the API returns the new ExecutionLog for the retry attempt
+};
+
+// Restore a workflow/execution from a snapshot
+export const restoreSnapshot = async (snapshotId: string): Promise<WorkflowDetail | ExecutionSummary> => { // Return type might vary based on API
+    console.log(`Restoring from snapshot ${snapshotId}`);
+    const response = await apiClient.post(`/snapshots/${snapshotId}/restore`);
+    return response.data; // Assuming API returns the newly created workflow or execution
+};
 
 // Fetch snapshots (summary view) - potentially filtered
 export const fetchSnapshots = async (filters: { workflowId?: string; stageId?: string; executionId?: string } = {}): Promise<SnapshotSummary[]> => {
@@ -193,8 +232,36 @@ export const fetchSnapshots = async (filters: { workflowId?: string; stageId?: s
     return response.data;
 };
 
-// - fetchSnapshots(workflowId?: string, stageId?: string): Promise<SnapshotSummary[]>
-// - createSnapshot(data: { executionId: string, stageId: string, name: string, stateData: any }): Promise<SnapshotDetail>
-// - fetchSnapshotDetail(snapshotId: string): Promise<SnapshotDetail>
-// - restoreFromSnapshot(snapshotId: string): Promise<ExecutionSummary> // Might start a new execution
-// - fetchModels(): Promise<Model[]>
+// Fetch snapshot details
+export const fetchSnapshotDetail = async (snapshotId: string): Promise<SnapshotDetail> => {
+    console.log(`Fetching details for snapshot ${snapshotId}`);
+    const response = await apiClient.get(`/snapshots/${snapshotId}`);
+    return response.data;
+};
+
+// Create a snapshot
+export const createSnapshot = async (data: { executionId: string, stageId: string, name: string, stateData?: any }): Promise<SnapshotDetail> => {
+    console.log(`Creating snapshot with data:`, data);
+    const response = await apiClient.post('/snapshots', data);
+    return response.data;
+};
+
+// Delete a snapshot
+export const deleteSnapshot = async (snapshotId: string): Promise<void> => {
+    console.log(`Deleting snapshot ${snapshotId}`);
+    await apiClient.delete(`/snapshots/${snapshotId}`);
+};
+
+// Fetch available models (if applicable)
+// export const fetchModels = async (): Promise<Model[]> => {
+//     console.log('Fetching models');
+//     const response = await apiClient.get('/models'); // Adjust endpoint if needed
+//     return response.data;
+// };
+
+// Placeholder for updating execution status (if needed directly)
+export const updateExecutionStatus = async (executionId: string, status: string): Promise<ExecutionSummary> => {
+    console.log(`Updating execution ${executionId} status to: ${status}`);
+    const response = await apiClient.put(`/executions/${executionId}`, { status });
+    return response.data;
+};

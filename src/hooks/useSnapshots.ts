@@ -4,9 +4,14 @@ import {
   fetchSnapshots,
   createSnapshot,
   fetchSnapshotDetail,
+  restoreSnapshot, // Added
+  deleteSnapshot,  // Added
   SnapshotSummary,
   SnapshotDetail,
+  WorkflowDetail,  // Added for restore return type
+  ExecutionSummary // Added for restore return type
 } from '@/services/apiClient';
+import { workflowKeys, executionKeys } from './useWorkflows'; // Import keys for invalidation
 
 // Define query keys
 const snapshotKeys = {
@@ -60,6 +65,56 @@ export const useCreateSnapshot = () => {
     onError: (error) => {
       console.error('Error creating snapshot:', error);
       // Add error handling/feedback here
+    },
+  });
+};
+
+// Hook to restore from a snapshot (Mutation)
+export const useRestoreSnapshot = () => {
+  const queryClient = useQueryClient();
+  return useMutation<
+    WorkflowDetail | ExecutionSummary, // Return type might be workflow or execution
+    Error,                            // Error type
+    string                            // Input variable (snapshotId)
+  >({
+    mutationFn: (snapshotId) => restoreSnapshot(snapshotId),
+    onSuccess: (restoredItem, snapshotId) => {
+      console.log(`Restored successfully from snapshot ${snapshotId}:`, restoredItem);
+      // Invalidate relevant lists depending on what was restored
+      // If it returns a WorkflowDetail, invalidate workflow lists
+      if ('stages' in restoredItem) { // Heuristic check for WorkflowDetail
+        queryClient.invalidateQueries({ queryKey: workflowKeys.lists() });
+      } else { // Assume ExecutionSummary
+        queryClient.invalidateQueries({ queryKey: executionKeys.lists() });
+      }
+      // Add user feedback (e.g., toast, navigation)
+    },
+    onError: (error, snapshotId) => {
+      console.error(`Error restoring from snapshot ${snapshotId}:`, error);
+      // Add user feedback
+    },
+  });
+};
+
+// Hook to delete a snapshot (Mutation)
+export const useDeleteSnapshot = () => {
+  const queryClient = useQueryClient();
+  return useMutation<
+    void,   // Return type
+    Error,  // Error type
+    string  // Input variable (snapshotId)
+  >({
+    mutationFn: (snapshotId) => deleteSnapshot(snapshotId),
+    onSuccess: (_, snapshotId) => {
+      console.log(`Snapshot ${snapshotId} deleted successfully`);
+      // Invalidate snapshot lists
+      queryClient.invalidateQueries({ queryKey: snapshotKeys.lists() });
+      // Remove the deleted snapshot's detail from cache
+      queryClient.removeQueries({ queryKey: snapshotKeys.detail(snapshotId) });
+    },
+    onError: (error, snapshotId) => {
+      console.error(`Error deleting snapshot ${snapshotId}:`, error);
+      // Add user feedback
     },
   });
 };
