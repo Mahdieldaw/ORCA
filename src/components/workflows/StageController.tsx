@@ -11,12 +11,32 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Ban, CircleCheck, CircleDashed, RefreshCcw, Save, Play, ThumbsUp, ThumbsDown, Loader2, RotateCcw, Info } from 'lucide-react'; // Added Info icon
+import { Ban, CircleCheck, CircleDashed, RefreshCcw, Save, Play, ThumbsUp, ThumbsDown, Loader2, RotateCcw, Info, AlertTriangle } from 'lucide-react'; // Added Info, AlertTriangle icons
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 // Corrected import path for execution hooks
 import { useStartWorkflowExecution, useRecordManualValidation, useRetryStage, useGetExecutionLogs } from '@/hooks/useExecutions'; 
 import { useToast } from '@/components/ui/use-toast'; // Import useToast
 import { ExecutionLog } from '@/services/apiClient'; // Import ExecutionLog type
+
+// Map log status to badge variant (copied from GhostOverlay)
+const getStatusVariant = (status: string | null | undefined): "default" | "secondary" | "destructive" | "outline" => {
+  switch (status?.toLowerCase()) {
+    case 'completed':
+    case 'passed':
+      return 'default'; // Greenish (default)
+    case 'failed':
+    case 'error':
+      return 'destructive'; // Red
+    case 'running':
+    case 'pending':
+    case 'awaiting_validation': // Added awaiting validation
+      return 'secondary'; // Grayish
+    case 'skipped':
+      return 'outline'; // Outline
+    default:
+      return 'secondary';
+  }
+};
 
 // Remove ApiWorkflowDetail interface, use Stage from Prisma
 // interface ApiWorkflowDetail { ... }
@@ -194,6 +214,13 @@ export const StageController: React.FC<StageControllerProps> = ({
             <CardDescription>{stage.description || 'No description provided.'}</CardDescription>
           </div>
           <ValidationStatusIndicator type={stage.validationType} criteria={stage.validationCriteria} />
+          </div>
+          {/* Display current stage status based on latest log */} 
+          {latestLogForStage && (
+            <Badge variant={getStatusVariant(latestLogForStage.status)} className="capitalize ml-2">
+              {latestLogForStage.status}
+            </Badge>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -247,6 +274,18 @@ export const StageController: React.FC<StageControllerProps> = ({
                <p className="text-xs">Validation Result: <span className={`font-semibold ${latestLogForStage.validationResult ? 'text-green-600' : 'text-red-600'}`}>{latestLogForStage.validationResult ? 'Passed' : 'Failed'}</span></p>
             )}
              <p className="text-xs text-muted-foreground">Started: {new Date(latestLogForStage.startedAt).toLocaleString()} | Ended: {latestLogForStage.endedAt ? new Date(latestLogForStage.endedAt).toLocaleString() : 'N/A'}</p>
+          </div>
+        )}
+
+        {/* Display Latest Log Details if available */} 
+        {latestLogForStage && (
+          <div className="mt-4 p-3 border rounded-md bg-muted/30 text-xs space-y-2">
+            <h4 className="text-sm font-medium mb-1">Latest Attempt Details (Attempt {latestLogForStage.attemptNumber ?? 'N/A'})</h4>
+            <p className="text-muted-foreground">Executed: {new Date(latestLogForStage.completedAt ?? latestLogForStage.startedAt).toLocaleString()}</p>
+            {latestLogForStage.inputData && <div><Label className="text-xxs uppercase text-muted-foreground">Inputs:</Label><pre className="text-xxs bg-background/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(latestLogForStage.inputData, null, 2)}</pre></div>}
+            {(latestLogForStage.outputData || latestLogForStage.processedOutput) && <div><Label className="text-xxs uppercase text-muted-foreground">Output:</Label><pre className="text-xxs bg-background/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(latestLogForStage.outputData ?? latestLogForStage.processedOutput, null, 2)}</pre></div>}
+            {latestLogForStage.errorDetails && <p className="text-destructive mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/> Error: {latestLogForStage.errorDetails}</p>}
+            {/* Add other relevant fields from ExecutionLog if needed */}
           </div>
         )}
 

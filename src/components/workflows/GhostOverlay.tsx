@@ -36,22 +36,33 @@ const getStatusVariant = (status: string): "default" | "secondary" | "destructiv
   }
 };
 
-// Simple component to render a history entry using ExecutionLog type
+import { Label } from '@/components/ui/label'; // Added Label import
+
+// Updated component to render detailed history entry using ExecutionLog type
 const HistoryEntry: React.FC<{ item: ExecutionLog }> = ({ item }) => {
-  const statusVariant = getStatusVariant(item.status);
+  // Note: The ExecutionLog type might need adjustment if fields like 'validationResult', 'attemptNumber', 'inputs', 'rawOutput', 'parsedOutput', 'errorMessage', 'validatorNotes' are not present.
+  // We'll use existing fields or placeholders for now.
+  const validationResult = item.status; // Using 'status' as a proxy for validationResult for now
+  const attemptNumber = item.attemptNumber ?? 1; // Assuming attemptNumber might exist, default to 1
+  const executedAt = item.completedAt ?? item.startedAt; // Use completedAt if available, else startedAt
 
   return (
-    <div className="p-2 border-b last:border-b-0">
+    <div className="p-2 border-b last:border-b-0 text-xs">
       <div className="flex justify-between items-center mb-1">
-        {/* Assuming stage name needs to be fetched or derived if not directly in log */}
-        <p className="text-sm font-medium">Stage {item.stageOrder} (ID: {item.stageId.substring(0, 6)}...)</p>
-        <Badge variant={statusVariant} className="text-xs capitalize">{item.status}</Badge>
+        <p className="font-medium">Stage {item.stageOrder} <span className="text-muted-foreground">(Attempt {attemptNumber})</span></p>
+        {/* Using item.status for badge, assuming it reflects validation */}
+        <Badge variant={getStatusVariant(validationResult ?? 'pending')} className="capitalize">{validationResult ?? 'pending'}</Badge>
       </div>
-      <p className="text-xs text-muted-foreground mb-1">Started: {new Date(item.startedAt).toLocaleString()}</p>
-      {/* Display summary or relevant output/error */}
-      <p className="text-xs truncate">
-        {item.errorDetails ? `Error: ${item.errorDetails}` : (item.processedOutput ? `Output: ${JSON.stringify(item.processedOutput)}` : 'No output/error details.')}
-      </p>
+      <p className="text-muted-foreground mb-1">Executed: {new Date(executedAt).toLocaleString()}</p>
+      {/* Displaying available fields, mapping them to the requested structure */}
+      {item.inputData && <div><Label className="text-xxs uppercase text-muted-foreground">Inputs:</Label><pre className="text-xxs bg-muted/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(item.inputData, null, 2)}</pre></div>}
+      {/* 'rawOutput' is not directly available in ExecutionLog, using 'outputData' or 'processedOutput' as proxy */}
+      {(item.outputData || item.processedOutput) && <div><Label className="text-xxs uppercase text-muted-foreground">Output:</Label><pre className="text-xxs bg-muted/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(item.outputData ?? item.processedOutput, null, 2)}</pre></div>}
+      {/* 'parsedOutput' is not directly available, using 'processedOutput' if different logic is needed later */}
+      {/* item.parsedOutput && <div><Label className="text-xxs uppercase text-muted-foreground">Parsed Output:</Label><pre className="text-xxs bg-muted/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(item.parsedOutput, null, 2)}</pre></div> */}
+      {item.errorDetails && <p className="text-destructive mt-1">Error: {item.errorDetails}</p>}
+      {/* 'validatorNotes' is not directly available in ExecutionLog */}
+      {/* item.validatorNotes && <p className="text-muted-foreground mt-1">Notes: {item.validatorNotes}</p> */}
     </div>
   );
 };

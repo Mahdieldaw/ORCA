@@ -27,7 +27,9 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'; // Import AlertDialog for confirmation
 import { useToast } from '@/components/ui/use-toast'; // Import useToast for feedback
-import { WorkflowDetail, Stage } from '@/services/apiClient'; // Import API types
+import { WorkflowDetail, Stage, ExecutionLog } from '@/services/apiClient'; // Import API types
+import { useGetExecutionLogs } from '@/hooks/useExecutions'; // Import hook for logs
+import { WorkflowProgressStepper } from '@/components/workflows/WorkflowProgressStepper'; // Import the stepper
 
 // Define a type for the workflow data expected from the API
 // Adjust this based on the actual API response structure
@@ -257,70 +259,118 @@ const WorkflowDetailEditor = ({ workflowId }: { workflowId: string }) => {
   );
 };
 
-// Component to manage the display of the active workflow's details and stages
-const ActiveWorkflowView = ({ workflowId }: { workflowId: string }) => {
-  const { data: workflowDetail, isLoading, error } = useGetWorkflowDetail(workflowId);
+// Component to display the active workflow's details and stages
+const ActiveWorkflowView = ({ workflowId, currentExecutionId }: { workflowId: string; currentExecutionId: string | null }) => { // Added currentExecutionId prop
+  const { data: workflowDetail, isLoading, error, refetch: refetchDetail } = useGetWorkflowDetail(workflowId);
+  const { data: logs, isLoading: isLoadingLogs, error: logsError } = useGetExecutionLogs(currentExecutionId!, {
+    enabled: !!currentExecutionId, // Only fetch if executionId is present
+    refetchInterval: 5000, // Optional: Refetch logs periodically
+  });
   const [activeStage, setActiveStage] = useState<Stage | null>(null);
-  const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(null); // Example state
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false); // State for the drawer
 
+  // Refetch detail when workflowId changes
   useEffect(() => {
-    // Set the first stage as active when workflow details load
-    // TODO: Add logic to determine the *actual* active stage based on execution state
-    if (workflowDetail?.stages && workflowDetail.stages.length > 0) {
-      setActiveStage(workflowDetail.stages[0]);
-    }
-  }, [workflowDetail]);
-
-  const handleTriggerSnapshotDrawer = () => {
-    console.log('Opening HybridThinkDrawer.');
-    setIsDrawerOpen(true);
-  };
+    setActiveStage(null); // Reset active stage when workflow changes
+    refetchDetail();
+  }, [workflowId, refetchDetail]);
 
   if (isLoading) {
     return (
-      <div>
-        <Skeleton className="h-40 w-full mb-6" /> {/* Placeholder for editor */}
-        <Skeleton className="h-96 w-full" /> {/* Placeholder for stage controller */}
+      <div className="p-4 border rounded-lg">
+        <Skeleton className="h-8 w-3/4 mb-4" />
+        <Skeleton className="h-6 w-full mb-2" />
+        <Skeleton className="h-6 w-full" />
+        <div className="mt-6 space-y-4">
+            <Skeleton className="h-6 w-1/4 mb-2" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+        </div>
       </div>
     );
   }
 
   if (error) {
-    return <p className="text-destructive">Error loading workflow: {(error as Error).message}</p>;
+    return (
+      <div className="p-4 bg-destructive/10 border border-destructive text-destructive rounded-md">
+        <p className="font-semibold">Error loading workflow details:</p>
+        <p className="text-sm">{(error as Error).message || 'An unknown error occurred.'}</p>
+      </div>
+    );
   }
 
   if (!workflowDetail) {
-    return <p className="text-muted-foreground">Workflow not found.</p>;
+    return <div className="p-4 border rounded-lg text-muted-foreground">Select a workflow to see details.</div>;
   }
 
-  // TODO: Add UI to select different stages if needed
+  // Find the latest log for the currently active stage
+  const latestLogForActiveStage = activeStage && logs
+    ? logs
+        .filter(log => log.stageId === activeStage.id)
+        .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())[0]
+    : null;
 
   return (
-    <>
+    <div className="p-4 border rounded-lg">
       <WorkflowDetailEditor workflowId={workflowId} />
-      {activeStage ? (
-        <StageController
-          workflowId={workflowId} // Pass parent workflow ID
-          stage={activeStage} // Pass the specific stage data
-          currentExecutionId={currentExecutionId} // Pass execution context
-          onTriggerSnapshotDrawer={handleTriggerSnapshotDrawer}
-          // Pass other relevant props like execution status, logs etc.
+
+      {/* Workflow Progress Stepper - Display if stages exist */}
+      {workflowDetail.stages && workflowDetail.stages.length > 0 && (
+        <WorkflowProgressStepper
+          stages={workflowDetail.stages}
+          logs={logs}
+          currentStageId={activeStage?.id} // Highlight the active stage in the stepper
         />
-      ) : (
-        <p className="text-muted-foreground">No active stage selected or workflow has no stages.</p>
       )}
 
-      {/* Drawer for Snapshots - Rendered conditionally based on isDrawerOpen */}
-      <HybridThinkDrawer
-        isOpen={isDrawerOpen}
-        onOpenChange={setIsDrawerOpen}
-        workflowId={workflowId} // Pass the active workflow ID
-      />
+      {/* Display Loading/Error for Logs */} 
+      {isLoadingLogs && <p className="text-sm text-muted-foreground my-2">Loading execution logs...</p>}
+      {logsError && <p className="text-sm text-destructive my-2">Error loading logs: {logsError.message}</p>}
 
-      {/* Overlay for Execution History - Needs separate state management */}
-      {/* {currentExecutionId && <GhostOverlay ... />} */}
-    </>
+      {/* Stage Listing Section */}
+      <div className="mt-6 space-y-4">
+        <h3 className="text-lg font-semibold">Stages</h3>
+        {workflowDetail.stages && workflowDetail.stages.length > 0 ? (
+          workflowDetail.stages.map((stage) => (
+            <StageCard
+              key={stage.id}
+              stage={stage}
+              workflowId={workflowId} // Pass workflowId
+              onClick={() => setActiveStage(stage)} // Set the clicked stage as active
+              // No onDelete needed here, StageCard handles its own delete
+            />
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">No stages defined for this workflow yet.</p>
+        )}
+        {/* TODO: Add Button/Mechanism to create a new stage */}
+      </div>
+
+      {/* Stage Controller Section - Renders when a stage is active */}
+      {activeStage && (
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold mb-2">Stage Configuration: {activeStage.name}</h3>
+          <StageController
+            stage={activeStage}
+            workflowId={workflowId}
+            currentExecutionId={currentExecutionId} // Pass current execution ID
+            latestLogForStage={latestLogForActiveStage} // Pass the latest log for this stage
+            // TODO: Pass onTriggerSnapshotDrawer if needed
+            onTriggerSnapshotDrawer={() => console.log('Trigger snapshot drawer from StageController')} // Placeholder
+            // onSaveSuccess is not a prop of StageController, remove or handle differently
+            /* onSaveSuccess={() => { 
+              setActiveStage(null); // Optionally close controller on save
+              refetchDetail(); // Refetch details to show updated stage list/data
+            }} */
+            // onCancel is not a prop of StageController, remove or handle differently
+            // onCancel={() => setActiveStage(null)} // Close controller on cancel
+              setActiveStage(null); // Optionally close controller on save
+              refetchDetail(); // Refetch details to show updated stage list/data
+            }}
+            onCancel={() => setActiveStage(null)} // Close controller on cancel
+          />
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -361,7 +411,7 @@ export default function WorkflowExplorerPage() {
 
          {/* Conditionally render ActiveWorkflowView or WorkflowExplorer list */} 
          {activeWorkflowId ? (
-           <ActiveWorkflowView workflowId={activeWorkflowId} />
+           <ActiveWorkflowView workflowId={activeWorkflowId} currentExecutionId={currentExecutionId} /> // Pass currentExecutionId
          ) : (
            <WorkflowExplorer />
          )}

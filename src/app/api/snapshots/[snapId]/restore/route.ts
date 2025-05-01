@@ -41,56 +41,79 @@ export async function POST(
 
     const originalWorkflow = snapshot.workflow;
 
-    // 2. Create a new WorkflowExecution based on the snapshot
-    const newExecution = await prisma.workflowExecution.create({
+    // 2. Create a new Workflow based on the snapshot's original workflow data
+    //    (Assuming snapshot stores enough info or we use originalWorkflow)
+    const restoredWorkflow = await prisma.workflow.create({
       data: {
-        workflowId: originalWorkflow.id,
         userId: userId, // Associate with the current user
-        status: WorkflowExecutionStatus.PENDING, // Start as pending
-        name: `${originalWorkflow.name} (Restored ${new Date().toISOString()})`, // Indicate it's restored
-        // description: originalWorkflow.description, // Copy description
-        // inputData: snapshot.executionInputData, // Use input data from snapshot if available
-        snapshotId: snapId, // Link back to the snapshot used for restoration
-        // stages: {} // Stages will be created separately below
+        name: `${originalWorkflow.name} (Restored ${new Date().toISOString()})`,
+        description: originalWorkflow.description,
+        // Copy other relevant fields from originalWorkflow as needed
+        // Example: isPublic: originalWorkflow.isPublic,
       },
     });
 
-    // 3. Create StageExecution records for the new WorkflowExecution
-    //    based on the stages from the original workflow
-    const stageExecutionsToCreate = originalWorkflow.stages.map(stage => ({
-      executionId: newExecution.id,
-      stageId: stage.id,
-      status: StageExecutionStatus.PENDING, // All stages start as pending
+    // 3. Create new Stages for the restored workflow based on the original stages
+    const restoredStagesData = originalWorkflow.stages.map((stage: any) => ({
+      workflowId: restoredWorkflow.id,
+      name: stage.name,
+      description: stage.description,
       order: stage.order,
-      // inputData: null, // Input data might be set later or come from workflow input
-      // result: null,
-      // startedAt: null,
-      // finishedAt: null,
+      prompt: stage.prompt,
+      llmConfig: stage.llmConfig ?? Prisma.JsonNull,
+      outputSchema: stage.outputSchema ?? Prisma.JsonNull,
+      retryLimit: stage.retryLimit,
+      timeoutSeconds: stage.timeoutSeconds,
+      nextStageOnFail: stage.nextStageOnFail,
+      nextStageOnPass: stage.nextStageOnPass,
+      // Map other stage fields as necessary
     }));
+    await prisma.stage.createMany({ data: restoredStagesData });
 
-    await prisma.stageExecution.createMany({
-      data: stageExecutionsToCreate,
+    // --- Optional: Start Execution --- 
+    const shouldStartExecution = false; // Set to true if restore should auto-run
+    let newExecution = null;
+    if (shouldStartExecution) {
+        const initialStageOrder = 1; // Assuming first stage order is 1
+        // Find the ID of the first stage in the *newly created* stages
+        const firstRestoredStage = await prisma.stage.findFirst({
+            where: { workflowId: restoredWorkflow.id, order: initialStageOrder },
+            select: { id: true },
+        });
+
+        if (!firstRestoredStage) {
+             console.error(`Could not find the first stage (order ${initialStageOrder}) for the restored workflow ${restoredWorkflow.id}`);
+             // Handle error appropriately - maybe don't start execution
+        } else {
+            newExecution = await prisma.execution.create({
+                data: {
+                    userId: userId,
+                    workflowId: restoredWorkflow.id,
+                    status: 'PENDING', // Start as pending, execution service will pick it up
+                    // Use inputs from snapshot if available, else empty
+                    // executionInputs: snapshot.executionInputData ?? Prisma.JsonNull, // Assuming snapshot has this field
+                    currentStageOrder: initialStageOrder,
+                    executionContext: {}, // Initial empty context
+                },
+            });
+            console.log(`Also created new execution ${newExecution.id} for restored workflow ${restoredWorkflow.id}.`);
+            // TODO: Trigger execution service for newExecution.id
+            // This depends on the execution engine logic.
+            // await executionService.processExecutionStep(newExecution.id);
+        }
+    }
+    // --- End Optional Execution ---
+
+    // Return the restored workflow (or execution if started)
+    // Fetch the complete workflow with stages again to return it
+    const finalRestoredWorkflow = await prisma.workflow.findUnique({
+        where: { id: restoredWorkflow.id },
+        include: { stages: { orderBy: { order: 'asc' } } }
     });
 
-    // 4. Optionally, create an initial ExecutionLog entry
-    //    This might indicate the start of the restored execution
-    // await prisma.executionLog.create({
-    //   data: {
-    //     executionId: newExecution.id,
-    //     // stageId: null, // Or the first stage ID?
-    //     status: ExecutionLogStatus.PENDING,
-    //     message: `Workflow execution restored from snapshot ${snapId}`,
-    //   },
-    // });
-
-    // 5. TODO: Trigger the start of the new execution (e.g., run the first stage)
-    // This depends on the execution engine logic.
-    // await triggerWorkflowExecutionStart(newExecution.id);
-
-    console.log(`Workflow execution ${newExecution.id} created by restoring snapshot ${snapId}`);
-
-    // Return the newly created workflow execution
-    return NextResponse.json(newExecution, { status: 201 }); // 201 Created
+    // If execution was started, maybe return that instead or alongside?
+    // For now, returning the workflow structure.
+    return NextResponse.json(finalRestoredWorkflow, { status: 201 }); // 201 Created
 
   } catch (error) {
     console.error(`Error restoring snapshot ${snapId}:`, error);

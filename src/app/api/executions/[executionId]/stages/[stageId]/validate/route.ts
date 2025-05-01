@@ -28,14 +28,16 @@ export async function POST(
   try {
     // 1. Find the specific execution stage log to update
     //    We might need more specific logic here depending on how logs are structured.
-    //    Assuming we update the *latest* log for this stage in this execution.
+    //    Find the absolute latest log entry for this stage in this execution.
     const latestLog = await prisma.executionLog.findFirst({
       where: {
         executionId: executionId,
         stageId: stageId,
       },
       orderBy: {
-        createdAt: 'desc',
+        // Choose one: executedAt for time-based, attemptNumber for retry-based
+        // executedAt: 'desc',
+        attemptNumber: 'desc',
       },
     });
 
@@ -49,10 +51,10 @@ export async function POST(
         id: latestLog.id,
       },
       data: {
-        validationResult: validationResult,
-        // Potentially store comments if the schema supports it
-        // comments: comments, // Uncomment if comments field exists
-        status: validationResult ? 'VALIDATION_PASSED' : 'VALIDATION_FAILED', // Update status based on validation
+        validationResult: validationResult ? 'pass' : 'fail', // Store as 'pass' or 'fail'
+        validatorNotes: comments, // Store comments from request body
+        // Optionally update log status here too, e.g., to 'COMPLETED' or 'FAILED'
+        // status: validationResult ? 'COMPLETED' : 'FAILED',
       },
     });
 
@@ -73,6 +75,20 @@ export async function POST(
     // const workflowExecution = await prisma.workflowExecution.findUnique({ where: { id: executionId } });
     // Check if all stages are completed...
     // If so, update workflowExecution status to 'COMPLETED'
+
+    // --- Trigger Next Stage Logic (Placeholder) ---
+    if (validationResult) {
+        console.log(`Validation passed for stage ${stageId}, execution ${executionId}. Triggering next step.`);
+        // Placeholder: In a real backend service architecture, you'd call something like:
+        // await executionService.processExecutionStep(executionId);
+        // This service would check the updated log, find the next stage based on
+        // stages.nextStageOnPass, update execution.currentStageOrder, and run the next stage.
+    } else {
+         console.log(`Validation failed for stage ${stageId}, execution ${executionId}.`);
+         // Optionally update execution status to 'paused' or 'failed' if no retries left
+         // await prisma.execution.update({ where: { id: executionId }, data: { status: 'paused' }});
+    }
+    // --- End Trigger Logic ---
 
     return NextResponse.json(updatedLog, { status: 200 });
   } catch (error) {
