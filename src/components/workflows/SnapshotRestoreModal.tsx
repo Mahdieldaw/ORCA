@@ -14,27 +14,31 @@ import {
   AlertDialogTrigger, // Trigger would be placed elsewhere
 } from "@/components/ui/alert-dialog"; // Using AlertDialog for confirmation
 import { Button } from '@/components/ui/button';
-import { MockSnapshot } from '@/data/mockWorkflows'; // Adjust path
+// import { MockSnapshot } from '@/data/mockWorkflows'; // Remove mock import
+import { SnapshotSummary } from '@/services/apiClient'; // Import correct type
+import { Loader2 } from 'lucide-react'; // Import loader icon
 
 interface SnapshotRestoreModalProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  snapshotToRestore: MockSnapshot | null; // Pass the specific snapshot data
+  snapshotToRestore: SnapshotSummary | null; // Use SnapshotSummary type
   onConfirmRestore: (snapshotId: string) => void; // Action on confirmation
+  isRestoring: boolean; // Add loading state prop
 }
 
 export const SnapshotRestoreModal: React.FC<SnapshotRestoreModalProps> = ({
   isOpen,
   onOpenChange,
   snapshotToRestore,
-  onConfirmRestore
+  onConfirmRestore,
+  isRestoring, // Destructure the new prop
 }) => {
   if (!snapshotToRestore) return null; // Don't render if no snapshot is selected
 
   const handleConfirm = () => {
-    console.log(`[Phase 1 Placeholder] Confirmed restore for snapshot: ${snapshotToRestore.id}`);
+    // No console log needed here as it's handled in the drawer
     onConfirmRestore(snapshotToRestore.id);
-    // In Phase 3, this would trigger backend logic to load the snapshot data
+    // Modal closing logic is handled in the drawer's onSuccess/onError
   };
 
   return (
@@ -50,9 +54,10 @@ export const SnapshotRestoreModal: React.FC<SnapshotRestoreModalProps> = ({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={handleConfirm}>
-            Restore Snapshot
+          <AlertDialogCancel disabled={isRestoring}>Cancel</AlertDialogCancel> {/* Disable cancel during restore? Optional */} 
+          <AlertDialogAction onClick={handleConfirm} disabled={isRestoring}> {/* Disable button when restoring */} 
+            {isRestoring && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} {/* Show loader */} 
+            {isRestoring ? 'Restoring...' : 'Restore Snapshot'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

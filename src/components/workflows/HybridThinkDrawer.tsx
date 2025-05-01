@@ -8,8 +8,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal, History, Trash2, Loader2, AlertTriangle } from 'lucide-react'; // Combined imports
-import { useGetSnapshots, useRestoreSnapshot, useDeleteSnapshot, useCreateSnapshot } from '@/hooks/api/useSnapshots'; // Combined snapshot hooks
+import { Terminal, History, Trash2, Loader2, AlertTriangle, RotateCcw } from 'lucide-react'; // Combined imports, Added RotateCcw
+import { useGetSnapshots, useRestoreSnapshot, useDeleteSnapshot, useCreateSnapshot } from '@/hooks/useSnapshots'; // Corrected import path for hooks
 import { useToast } from '@/components/ui/use-toast'; // Import useToast
 import { Input } from '@/components/ui/input'; // Added for snapshot name
 import { SnapshotSummary } from '@/services/apiClient'; // Import type
@@ -23,12 +23,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'; // Import AlertDialog
+import { SnapshotRestoreModal } from './SnapshotRestoreModal'; // Import the modal
 
 interface HybridThinkDrawerProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  executionId: string | null; // ID of the current execution context
-  stageId: string | null; // ID of the current stage context
+  // Removed executionId and stageId as they are less relevant for listing/restoring snapshots
+  // We might need workflowId if snapshots are filtered by workflow
+  workflowId: string | null; 
 }
 
 // Simple component to render a snapshot entry - Consider integrating actions directly below
@@ -50,14 +52,13 @@ const SnapshotEntry: React.FC<{ snapshot: SnapshotSummary }> = ({ snapshot }) =>
 };
 
 
-export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, onOpenChange, executionId, stageId }) => {
+export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, onOpenChange, workflowId }) => {
   // Fetch snapshots using the hook, conditionally enabled
+  // Filter by workflowId if available
   const { data: snapshots, isLoading: isLoadingSnapshots, error: snapshotsError } = useGetSnapshots({
-    // Pass filters if needed
-    // executionId: executionId ?? undefined,
-    // stageId: stageId ?? undefined,
+    workflowId: workflowId ?? undefined,
   }, {
-    enabled: isOpen, // Only fetch when the drawer is open
+    enabled: isOpen && !!workflowId, // Only fetch when the drawer is open and workflowId is present
   });
 
   const { mutate: restoreSnapshot, isPending: isRestoring } = useRestoreSnapshot(); // Restore hook
@@ -68,6 +69,11 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
   // State for delete confirmation
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [snapshotToDelete, setSnapshotToDelete] = useState<SnapshotSummary | null>(null);
+  
+  // State for restore confirmation modal
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [snapshotToRestore, setSnapshotToRestore] = useState<SnapshotSummary | null>(null);
+
   const [newSnapshotName, setNewSnapshotName] = React.useState('');
 
   // Handle opening delete confirmation
@@ -78,12 +84,11 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
 
   // Handle confirming deletion
   const handleConfirmDelete = () => {
-    if (!snapshotToDelete || !executionId || !stageId) return;
+    if (!snapshotToDelete) return;
 
-    console.log(`Deleting snapshot ${snapshotToDelete.id} for execution ${executionId}, stage ${stageId}`);
-    deleteSnapshot(
-      { executionId, stageId, snapshotId: snapshotToDelete.id },
-      {
+    console.log(`Deleting snapshot ${snapshotToDelete.id}`);
+    // Assuming deleteSnapshot hook now only needs snapshotId
+    deleteSnapshot(snapshotToDelete.id, {
         onSuccess: () => {
           toast({
             title: 'Snapshot Deleted',
@@ -106,17 +111,25 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
     );
   };
 
-  // Handle restoring a snapshot
-  const handleRestoreSnapshot = (snapshotId: string) => {
-    if (!executionId || !stageId) return; // Should not happen if button is enabled
-    console.log(`Restoring snapshot ${snapshotId} for execution ${executionId}, stage ${stageId}`);
-    restoreSnapshot({ executionId, stageId, snapshotId }, {
-      onSuccess: () => {
+  // Handle opening the restore confirmation modal
+  const handleRestoreClick = (snapshot: SnapshotSummary) => {
+    setSnapshotToRestore(snapshot);
+    setIsRestoreModalOpen(true);
+  };
+
+  // Handle confirming the restore action (called by the modal)
+  const handleConfirmRestore = (snapshotId: string) => {
+    console.log(`Restoring snapshot ${snapshotId}`);
+    restoreSnapshot(snapshotId, {
+      onSuccess: (restoredItem) => { // restoredItem can be WorkflowDetail or ExecutionSummary
         toast({
           title: "Snapshot Restored",
-          description: "The selected snapshot has been restored successfully.",
+          description: `Workflow state restored from snapshot. ${'name' in restoredItem ? `New execution: ${restoredItem.name}` : ''}`,
         });
-        onOpenChange(false);
+        setIsRestoreModalOpen(false); // Close this modal
+        setSnapshotToRestore(null);
+        onOpenChange(false); // Close the drawer after successful restore
+        // Further actions like navigation might be needed depending on the return type
       },
       onError: (restoreError) => {
         toast({
@@ -124,28 +137,36 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
           description: `Could not restore snapshot: ${(restoreError as Error).message}`,
           variant: "destructive",
         });
+        // Keep modal open on error?
+        // setIsRestoreModalOpen(false);
+        // setSnapshotToRestore(null);
       },
     });
   };
 
   // Handle saving a new snapshot
   const handleSaveNewSnapshot = () => {
-    if (!executionId || !stageId || !newSnapshotName.trim()) {
-      toast({ title: "Missing Information", description: "Execution context and snapshot name are required.", variant: "warning" });
+    // Saving snapshot might need more context (current execution/stage) - Revisit this logic
+    // For now, let's assume it needs workflowId and maybe some placeholder state
+    if (!workflowId || !newSnapshotName.trim()) {
+      toast({ title: "Missing Information", description: "Workflow context and snapshot name are required.", variant: "warning" });
       return;
     }
-    console.log(`Attempting to save snapshot: ${newSnapshotName} for execution ${executionId}, stage ${stageId}`);
+    console.log(`Attempting to save snapshot: ${newSnapshotName} for workflow ${workflowId}`);
 
     // TODO: Define the actual 'stateData' to be saved.
+    // This likely needs to come from the currently active stage/editor state, not the drawer itself.
     const placeholderStateData = {
-      prompt: (document.getElementById(`prompt-${stageId}`) as HTMLTextAreaElement)?.value || '', // Example
-      // Add other relevant state data here...
+      // prompt: (document.getElementById(`prompt-${stageId}`) as HTMLTextAreaElement)?.value || '', // Example - Needs context
+      timestamp: new Date().toISOString(),
+      comment: 'State saved from drawer (placeholder)',
     };
 
     createSnapshotMutation.mutate(
       {
-        executionId,
-        stageId,
+        workflowId: workflowId, // Use workflowId
+        // executionId: currentExecutionId, // Need context if saving execution state
+        // stageId: currentStageId, // Need context if saving stage state
         name: newSnapshotName.trim(),
         stateData: placeholderStateData, // Replace with actual state data
       },
@@ -155,7 +176,7 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
           setNewSnapshotName(''); // Clear input
         },
         onError: (error) => {
-          toast({ title: "Save Failed", description: error?.message || 'Could not save snapshot.', variant: "destructive" });
+          toast({ title: "Save Failed", description: (error as Error)?.message || 'Could not save snapshot.', variant: "destructive" });
         },
       }
     );
@@ -165,21 +186,21 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
       <SheetContent className="w-[400px] sm:w-[540px]"> {/* Example widths */}
         <SheetHeader>
-          <SheetTitle>Hybrid Think Panel</SheetTitle>
+          <SheetTitle>Workflow Snapshots</SheetTitle> {/* Updated Title */}
           <SheetDescription>
-            Manage snapshots and advanced stage actions.
+            Save or restore workflow states.
           </SheetDescription>
         </SheetHeader>
 
         <div className="py-4 space-y-6"> {/* Increased spacing */}
-          {/* Section for Saving Snapshots - Only show if context is available */}
-          {executionId && stageId && (
+          {/* Section for Saving Snapshots - Only show if context is available */} 
+          {workflowId && ( // Only show save if we have a workflow context
           <div>
-             <h3 className="text-sm font-semibold mb-2">Save Current State</h3>
+             <h3 className="text-sm font-semibold mb-2">Save Current Workflow State</h3>
              <div className="flex space-x-2">
                 <Input
                     type="text"
-                    placeholder="Snapshot Name (e.g., 'Before Edit')"
+                    placeholder="Snapshot Name (e.g., 'Initial Setup')"
                     value={newSnapshotName}
                     onChange={(e) => setNewSnapshotName(e.target.value)}
                     className="flex-grow"
@@ -197,84 +218,70 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
              </div>
              {createSnapshotMutation.isError && (
                 <p className="text-xs text-destructive mt-1">
-                    Error: {createSnapshotMutation.error?.message || 'Could not save snapshot.'}
+                    Error: {(createSnapshotMutation.error as Error)?.message || 'Could not save snapshot.'}
                 </p>
              )}
+             <p className="text-xs text-muted-foreground mt-1">Note: Saving captures the current workflow structure. Execution state saving needs context.</p>
           </div>
           )}
 
-          {/* Section for Existing Snapshots */}
+          {/* Section for Listing Snapshots */} 
           <div>
-            <h3 className="text-sm font-semibold mb-2">Existing Snapshots</h3>
-            <ScrollArea className="h-[40vh] pr-1"> {/* Adjusted height and padding */}
-              <div className="space-y-2">
-                {/* Loading State */}
-                {isLoadingSnapshots && (
-                  <div className="flex justify-center items-center py-4">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                )}
-
-                {/* Error State */}
-                {snapshotsError && (
-                  <Alert variant="destructive" className="my-4">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertTitle>Error Loading Snapshots</AlertTitle>
-                    <AlertDescription>{snapshotsError.message}</AlertDescription>
-                  </Alert>
-                )}
-
-                {/* Success State - Data Available */}
-                {!isLoadingSnapshots && !snapshotsError && snapshots && snapshots.length > 0 && (
-                  snapshots.map((snapshot) => (
-                    <div key={snapshot.id} className="flex items-center justify-between p-2 border rounded-md bg-background hover:bg-muted/50">
+            <h3 className="text-sm font-semibold mb-2">Available Snapshots</h3>
+            <ScrollArea className="h-[calc(100vh-300px)] pr-4"> {/* Adjust height as needed */} 
+              {isLoadingSnapshots && (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              )}
+              {snapshotsError && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Error Loading Snapshots</AlertTitle>
+                  <AlertDescription>{(snapshotsError as Error).message}</AlertDescription>
+                </Alert>
+              )}
+              {!isLoadingSnapshots && !snapshotsError && (!snapshots || snapshots.length === 0) && (
+                <p className="text-sm text-muted-foreground text-center py-4">No snapshots found for this workflow.</p>
+              )}
+              {!isLoadingSnapshots && !snapshotsError && snapshots && snapshots.length > 0 && (
+                <ul className="space-y-2">
+                  {snapshots.map((snapshot) => (
+                    <li key={snapshot.id} className="flex justify-between items-center p-3 border rounded-md bg-card">
                       <div>
-                        <p className="text-sm font-medium truncate max-w-[180px]" title={snapshot.name}>{snapshot.name || `Snapshot ${snapshot.id.substring(0, 6)}`}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(snapshot.createdAt).toLocaleString()}
-                        </p>
+                        <p className="text-sm font-medium">{snapshot.name}</p>
+                        <p className="text-xs text-muted-foreground">Saved: {new Date(snapshot.createdAt).toLocaleString()}</p>
                       </div>
-                      <div className="flex items-center space-x-1.5 shrink-0"> {/* Adjusted spacing */}
-                        {/* Restore Button */}
+                      <div className="flex space-x-1">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleRestoreSnapshot(snapshot.id)}
-                          disabled={isRestoring || isDeleting || createSnapshotMutation.isPending}
-                          aria-label={`Restore snapshot ${snapshot.name || snapshot.id}`}
+                          onClick={() => handleRestoreClick(snapshot)} // Open modal
+                          disabled={isRestoring || isDeleting} // Disable if any action is pending
+                          aria-label={`Restore snapshot ${snapshot.name}`}
                         >
-                          <History className="h-3.5 w-3.5" /> {/* Icon only for smaller button */}
+                          <RotateCcw className="h-3.5 w-3.5 mr-1" /> Restore
                         </Button>
-                        {/* Delete Button */}
                         <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => handleDeleteClick(snapshot)} // Pass snapshot object
-                          disabled={isRestoring || isDeleting || createSnapshotMutation.isPending}
-                          aria-label={`Delete snapshot ${snapshot.name || snapshot.id}`}
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:bg-destructive/10 h-8 w-8"
+                          onClick={() => handleDeleteClick(snapshot)}
+                          disabled={isRestoring || isDeleting}
+                          aria-label={`Delete snapshot ${snapshot.name}`}
                         >
-                          <Trash2 className="h-3.5 w-3.5" /> {/* Icon only */}
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
-                    </div>
-                  ))
-                )}
-
-                {/* Success State - No Data */}
-                {!isLoadingSnapshots && !snapshotsError && (!snapshots || snapshots.length === 0) && (
-                  <p className="text-sm text-muted-foreground text-center py-4">No snapshots saved yet.</p>
-                )}
-              </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </ScrollArea>
           </div>
         </div>
 
-        <SheetFooter>
-          {/* Optional: Add a close button if needed */}
-          {/* <SheetClose asChild>
-            <Button variant="outline">Close</Button>
-          </SheetClose> */}
-        </SheetFooter>
+        {/* No explicit footer needed for Sheet, close is usually in header or handled by overlay click */}
       </SheetContent>
 
       {/* Delete Confirmation Dialog */}
@@ -284,18 +291,27 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
               This action cannot be undone. This will permanently delete the snapshot
-              named "<span className='font-medium'>{snapshotToDelete?.name}</span>".
+              named "<span className="font-semibold">{snapshotToDelete?.name}</span>".
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setSnapshotToDelete(null)}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {isDeleting ? 'Deleting...' : 'Delete'}
+              {isDeleting ? 'Deleting...' : 'Delete Snapshot'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Restore Confirmation Modal */}
+      <SnapshotRestoreModal
+        isOpen={isRestoreModalOpen}
+        onOpenChange={setIsRestoreModalOpen}
+        snapshotToRestore={snapshotToRestore}
+        onConfirmRestore={handleConfirmRestore} // Pass the confirmation handler
+        isRestoring={isRestoring} // Pass loading state
+      />
     </Sheet>
   );
 };

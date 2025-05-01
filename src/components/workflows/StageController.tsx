@@ -1,55 +1,47 @@
 // src/components/workflows/StageController.tsx
 'use client';
 
-import React, { useState } from 'react';
-import { useGetWorkflowDetail, useUpdateStage } from '@/hooks/api/workflows'; // Import hook to fetch details and update stage
+import React, { useState, useEffect } from 'react'; // Added useEffect
+// Remove redundant useGetWorkflowDetail import
+// import { useGetWorkflowDetail, useUpdateStage } from '@/hooks/api/workflows'; 
+import { useUpdateStage } from '@/hooks/useStages'; // Corrected import path for useUpdateStage
+import { Stage } from '@prisma/client'; // Import Stage type from Prisma
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Ban, CircleCheck, CircleDashed, RefreshCcw, Save, Play, ThumbsUp, ThumbsDown, Loader2, RotateCcw } from 'lucide-react'; // Added Play, ThumbsUp, ThumbsDown, Loader2, RotateCcw icons
+import { Ban, CircleCheck, CircleDashed, RefreshCcw, Save, Play, ThumbsUp, ThumbsDown, Loader2, RotateCcw, Info } from 'lucide-react'; // Added Info icon
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
-import { useStartWorkflowExecution, useRecordManualValidation, useRetryStage } from '@/hooks/api/useExecutions'; // Import execution hooks
+// Corrected import path for execution hooks
+import { useStartWorkflowExecution, useRecordManualValidation, useRetryStage, useGetExecutionLogs } from '@/hooks/useExecutions'; 
 import { useToast } from '@/components/ui/use-toast'; // Import useToast
+import { ExecutionLog } from '@/services/apiClient'; // Import ExecutionLog type
 
-// Define a type for the detailed workflow data expected from the API
-// Adjust this based on the actual API response structure for workflow details
-interface ApiWorkflowDetail {
-  id: string;
-  name: string;
-  description?: string;
-  promptTemplate: string;
-  type: string; // e.g., 'manual', 'automated'
-  order: number;
-  validationType: 'none' | 'manual' | 'regex';
-  validationCriteria: string | null;
-  retryLimit?: number; // Added retryLimit
-  // Add other relevant fields from your detailed API response
-}
+// Remove ApiWorkflowDetail interface, use Stage from Prisma
+// interface ApiWorkflowDetail { ... }
 
 interface StageControllerProps {
-  activeWorkflowId: string; // Changed from optional initialStageData
-  currentExecutionId?: string | null; // Example: Pass current execution ID
-  // Add props related to execution status/logs if needed for conditional rendering
-  currentStageStatus?: string | null; // e.g., 'failed', 'error'
-  currentAttemptNumber?: number | null;
+  workflowId: string; // ID of the parent workflow
+  stage: Stage; // Pass the specific stage object as a prop
+  currentExecutionId?: string | null; // Pass current execution ID
   onTriggerSnapshotDrawer: () => void; // Renamed prop
+  // Add props for relevant execution log data for this stage
+  latestLogForStage?: ExecutionLog | null;
 }
 
 // Helper to render validation status visually
-// Updated to use ApiWorkflowDetail type
-const ValidationStatusIndicator: React.FC<{ type: ApiWorkflowDetail['validationType'], criteria: string | null }> = ({ type, criteria }) => {
+const ValidationStatusIndicator: React.FC<{ type: Stage['validationType'], criteria: string | null }> = ({ type, criteria }) => {
   let statusText = 'None';
   let Icon = Ban;
   let variant: "outline" | "secondary" | "destructive" | "default" = "outline";
 
-  if (type === 'manual') {
+  if (type === 'MANUAL') { // Use enum value from Prisma schema
     statusText = 'Manual Validation';
     Icon = CircleCheck; // Placeholder, real status comes later
     variant = "secondary";
-  } else if (type === 'regex' && criteria) {
-    statusText = `Regex: ${criteria}`;
+  } else if (type === 'REGEX' && criteria) { // Use enum value
+    statusText = `Regex: ${criteria}`; // Display criteria if available
     Icon = CircleDashed; // Placeholder
     variant = "secondary";
   }
@@ -63,17 +55,14 @@ const ValidationStatusIndicator: React.FC<{ type: ApiWorkflowDetail['validationT
 };
 
 export const StageController: React.FC<StageControllerProps> = ({
-  activeWorkflowId,
+  workflowId,
+  stage,
   currentExecutionId,
-  currentStageStatus,
-  currentAttemptNumber,
-  onTriggerSnapshotDrawer
+  onTriggerSnapshotDrawer,
+  latestLogForStage, // Receive the latest log for this stage
 }) => {
-  // Fetch workflow details using the hook
-  // NOTE: This hook fetches WORKFLOW details. If this component is meant to control a specific STAGE
-  // within a workflow, the data fetching strategy might need adjustment as per Phase 3, Item 4.
-  // Assuming for now `activeWorkflowId` IS the Stage ID for fetching details.
-  const { data: stageDetail, isLoading, error } = useGetWorkflowDetail(activeWorkflowId); // Renamed data for clarity
+  // Remove internal data fetching for stage details
+  // const { data: stageDetail, isLoading, error } = useGetWorkflowDetail(activeWorkflowId);
 
   // Instantiate the mutation hooks
   const { mutate: startExecution, isPending: isStartingExecution } = useStartWorkflowExecution();
@@ -82,49 +71,56 @@ export const StageController: React.FC<StageControllerProps> = ({
   const { mutate: retryStage, isPending: isRetrying } = useRetryStage(); // Retry hook
   const { toast } = useToast(); // Initialize toast
 
-  // State to manage the editable prompt, initialized once data loads
-  const [prompt, setPrompt] = useState('');
+  // State to manage the editable prompt, initialized from the stage prop
+  const [prompt, setPrompt] = useState(stage.promptTemplate || '');
 
-  // Update prompt state when stageDetail changes
-  React.useEffect(() => {
-    if (stageDetail) {
-      setPrompt(stageDetail.promptTemplate);
-    }
-  }, [stageDetail]);
+  // Update prompt state if the stage prop changes (e.g., navigating between stages)
+  useEffect(() => {
+    setPrompt(stage.promptTemplate || '');
+  }, [stage]);
 
   const handlePromptChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setPrompt(event.target.value);
   };
 
   const handleStartExecution = () => {
-    // This likely needs to start the PARENT workflow, not the stage itself.
-    // Requires knowing the parent workflow ID.
-    // For now, assuming `activeWorkflowId` might be misused here.
-    toast({ title: "Not Implemented", description: "Starting execution from stage controller needs review.", variant: "warning" });
-    // if (!stageDetail) { ... }
-    // startExecution({ workflowId: PARENT_WORKFLOW_ID, inputs });
+    // Start the PARENT workflow
+    if (!workflowId) {
+      toast({ title: "Error", description: "Workflow ID is missing.", variant: "destructive" });
+      return;
+    }
+    // TODO: Implement UI to collect initial inputs (Phase 3, Item 5)
+    const initialInputs = {}; // Placeholder for initial inputs
+    console.log(`Starting execution for workflow ${workflowId}`);
+    startExecution({ workflowId: workflowId, inputs: initialInputs }, {
+      onSuccess: (execution) => {
+        toast({ title: "Execution Started", description: `Workflow execution ${execution.id} initiated.` });
+        // TODO: Update state to reflect the new currentExecutionId
+      },
+      onError: (startError) => {
+        toast({ title: "Execution Failed", description: `Could not start workflow: ${(startError as Error).message}`, variant: "destructive" });
+      }
+    });
   };
 
   // Handle saving the updated stage prompt
   const handleSaveStage = () => {
-    if (!stageDetail) {
-      toast({ title: "Error", description: "Cannot save, stage details not loaded.", variant: "destructive" });
+    if (!stage) {
+      toast({ title: "Error", description: "Cannot save, stage data missing.", variant: "destructive" });
       return;
     }
-    if (prompt === stageDetail.promptTemplate) {
+    if (prompt === stage.promptTemplate) {
         toast({ title: "No Changes", description: "The prompt has not been modified." });
         return;
     }
 
-    // Assuming `activeWorkflowId` is the STAGE ID. Need parent workflow ID.
-    // This requires refactoring or passing the parent workflow ID as a prop.
-    const parentWorkflowId = "PARENT_WORKFLOW_ID_PLACEHOLDER"; // FIXME: Get parent workflow ID
-    console.log(`Saving stage ${stageDetail.id} in workflow ${parentWorkflowId}`);
+    console.log(`Saving stage ${stage.id} in workflow ${workflowId}`);
     updateStage(
-      { workflowId: parentWorkflowId, stageId: stageDetail.id, data: { promptTemplate: prompt } },
+      { workflowId: workflowId, stageId: stage.id, data: { promptTemplate: prompt } },
       {
         onSuccess: () => {
-          toast({ title: "Stage Saved", description: `Stage '${stageDetail.name}' prompt updated successfully.` });
+          toast({ title: "Stage Saved", description: `Stage '${stage.name}' prompt updated successfully.` });
+          // Optionally refetch workflow details if needed
         },
         onError: (saveError) => {
           toast({ title: "Save Failed", description: `Could not update stage prompt: ${(saveError as Error).message}`, variant: "destructive" });
@@ -134,18 +130,19 @@ export const StageController: React.FC<StageControllerProps> = ({
   };
 
   // Handle manual validation submission
-  const handleManualValidation = (result: 'pass' | 'fail') => {
-    if (!currentExecutionId || !stageDetail) {
+  const handleManualValidation = (validationResult: boolean) => { // Use boolean directly
+    if (!currentExecutionId || !stage) {
       toast({ title: "Error", description: "Execution context or stage details missing for validation.", variant: "destructive" });
       return;
     }
-    console.log(`Recording manual validation: ${result} for execution ${currentExecutionId}, stage ${stageDetail.id}`);
+    console.log(`Recording manual validation: ${validationResult ? 'Pass' : 'Fail'} for execution ${currentExecutionId}, stage ${stage.id}`);
+    // Assuming the hook now takes a boolean `validationResult`
     recordValidation(
-      { executionId: currentExecutionId, stageId: stageDetail.id, result },
+      { executionId: currentExecutionId, stageId: stage.id, validationResult: validationResult, comments: validationResult ? 'Manually passed' : 'Manually failed' }, // Pass boolean
       {
         onSuccess: () => {
-          toast({ title: "Validation Recorded", description: `Stage marked as ${result}.` });
-          // TODO: Add logic to potentially advance workflow or update UI based on result
+          toast({ title: "Validation Recorded", description: `Stage marked as ${validationResult ? 'Passed' : 'Failed'}.` });
+          // Invalidation happens within the hook
         },
         onError: (validationError) => {
           toast({ title: "Validation Failed", description: `Could not record validation: ${(validationError as Error).message}`, variant: "destructive" });
@@ -156,17 +153,17 @@ export const StageController: React.FC<StageControllerProps> = ({
 
   // Handle retrying a stage
   const handleRetryStage = () => {
-    if (!currentExecutionId || !stageDetail) {
+    if (!currentExecutionId || !stage) {
       toast({ title: "Error", description: "Execution context or stage details missing for retry.", variant: "destructive" });
       return;
     }
-    console.log(`Retrying stage ${stageDetail.id} for execution ${currentExecutionId}`);
+    console.log(`Retrying stage ${stage.id} for execution ${currentExecutionId}`);
     retryStage(
-      { executionId: currentExecutionId, stageId: stageDetail.id },
+      { executionId: currentExecutionId, stageId: stage.id },
       {
         onSuccess: () => {
-          toast({ title: "Retry Initiated", description: `Stage ${stageDetail.name} is being retried.` });
-          // TODO: Update UI to reflect retry attempt (e.g., clear previous error state)
+          toast({ title: "Retry Initiated", description: `Stage ${stage.name} is being retried.` });
+          // Invalidation happens within the hook
         },
         onError: (retryError) => {
           toast({ title: "Retry Failed", description: `Could not retry stage: ${(retryError as Error).message}`, variant: "destructive" });
@@ -175,179 +172,153 @@ export const StageController: React.FC<StageControllerProps> = ({
     );
   };
 
-  // Handle Loading State
-  if (isLoading) {
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <Skeleton className="h-6 w-3/4 mb-2" />
-          <Skeleton className="h-4 w-1/2" />
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Skeleton className="h-4 w-1/4 mb-1.5" />
-          <Skeleton className="h-36 w-full" />
-          <Skeleton className="h-4 w-1/3" />
-          <Skeleton className="h-4 w-1/4 mb-1" />
-          <Skeleton className="h-6 w-1/3" />
-          <div className="flex justify-between items-center pt-4 border-t">
-            <Skeleton className="h-9 w-1/4" />
-            <Skeleton className="h-9 w-1/4" />
-            <Skeleton className="h-9 w-1/4" />
-            <Skeleton className="h-9 w-1/4" />
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Determine stage status based on the latest log
+  const stageStatus = latestLogForStage?.status ?? 'PENDING'; // Default to PENDING if no log
+  const canRetry = (stageStatus === 'FAILED' || stageStatus === 'ERROR') && 
+                   (latestLogForStage?.attemptNumber ?? 0) < (stage.retryLimit ?? 0);
+  const needsManualValidation = stage.validationType === 'MANUAL' && stageStatus === 'AWAITING_VALIDATION';
 
-  if (error) {
-    return (
-      <Card className="w-full border-destructive">
-        <CardHeader>
-          <CardTitle className="text-destructive">Error Loading Stage</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-destructive">{(error as Error).message || 'Could not load stage details.'}</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!stageDetail) {
-    return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>No Stage Data</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p>Stage details could not be loaded.</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  // Determine if manual validation buttons should be shown
-  // TODO: Enhance this condition with actual execution status (e.g., is stage awaiting validation?)
-  const showManualValidationButtons = stageDetail.validationType === 'manual' && !!currentExecutionId;
-
-  // Determine if retry button should be shown/enabled
-  // TODO: Replace placeholder logic with actual conditions based on fetched execution logs/status
-  const canRetry = (
-    !!currentExecutionId &&
-    (currentStageStatus === 'failed' || currentStageStatus === 'error') &&
-    (currentAttemptNumber ?? 0) < (stageDetail.retryLimit ?? 0)
-  );
+  // Handle Loading State - Now handled by the parent component (`ActiveWorkflowView`)
+  // if (isLoading) { ... }
+  // Handle Error State - Now handled by the parent component
+  // if (error) { ... }
+  // Handle No Data State - Now handled by the parent component
+  // if (!stageDetail) { ... }
 
   return (
-    <Card className="w-full">
+    <Card className="w-full mb-6"> {/* Added margin-bottom */} 
       <CardHeader>
-        <div className="flex justify-between items-center">
-          <CardTitle>Stage {stageDetail.order}: {stageDetail.name}</CardTitle>
-          {/* Placeholder status lights */}
-          <div className="flex space-x-2">
-             <span className="h-3 w-3 bg-yellow-400 rounded-full animate-pulse" title="Current (Placeholder)"></span>
-             <span className="h-3 w-3 bg-gray-300 rounded-full" title="Validation Pending (Placeholder)"></span>
+        <div className="flex justify-between items-start">
+          <div>
+            <CardTitle>{stage.name || 'Untitled Stage'}</CardTitle>
+            <CardDescription>{stage.description || 'No description provided.'}</CardDescription>
           </div>
+          <ValidationStatusIndicator type={stage.validationType} criteria={stage.validationCriteria} />
         </div>
-        <CardDescription>
-          Configure and review this stage. Type: {stageDetail.type}
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Prompt Editor Section */}
-        <div className="space-y-1.5">
-          <Label htmlFor={`prompt-${stageDetail.id}`} className="text-sm font-medium">
-            Prompt Template
-          </Label>
+        {/* Prompt Editor */} 
+        <div>
+          <Label htmlFor={`prompt-${stage.id}`}>Prompt Template</Label>
           <Textarea
-            id={`prompt-${stageDetail.id}`}
+            id={`prompt-${stage.id}`}
             value={prompt}
             onChange={handlePromptChange}
-            placeholder="Enter your prompt template here. Use {{variable}} for placeholders."
-            className="min-h-[150px] font-mono text-xs resize-y"
-            aria-label="Prompt template editor"
-            aria-describedby={`prompt-hint-${stageDetail.id}`}
+            placeholder="Enter the prompt for this stage..."
+            rows={8} // Increased rows for better visibility
+            className="mt-1"
+            disabled={isUpdatingStage}
           />
-          <p id={`prompt-hint-${stageDetail.id}`} className="text-xs text-muted-foreground">
-            Use {'{{variable_name}}'} syntax for dynamic inputs.
-          </p>
         </div>
 
-        {/* Validation Status Section */}
-        <div>
-          <Label className="text-sm font-medium">Validation</Label>
-          <div className="mt-1 flex items-center space-x-2 flex-wrap gap-2"> {/* Added flex-wrap and gap */}
-            <ValidationStatusIndicator
-                type={stageDetail.validationType}
-                criteria={stageDetail.validationCriteria}
-            />
-            {/* Manual Validation Buttons */}
-            {showManualValidationButtons && (
-              <div className="flex items-center space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleManualValidation('pass')}
-                  disabled={isValidating || isRetrying}
-                  className="border-green-500 text-green-600 hover:bg-green-50 hover:text-green-700"
-                >
-                  {isValidating ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <ThumbsUp className="mr-1 h-4 w-4" />} Pass
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleManualValidation('fail')}
-                  disabled={isValidating || isRetrying}
-                  className="border-red-500 text-red-600 hover:bg-red-50 hover:text-red-700"
-                >
-                  {isValidating ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <ThumbsDown className="mr-1 h-4 w-4" />} Fail
-                </Button>
+        {/* Display Execution Output/Error if available */} 
+        {latestLogForStage && (
+          <div className="space-y-2 p-3 border rounded-md bg-muted/50">
+            <h4 className="text-sm font-medium flex items-center">
+              <Info className="h-4 w-4 mr-2 text-muted-foreground" />
+              Latest Execution Log (Attempt {latestLogForStage.attemptNumber})
+              <Badge variant={getStatusVariant(latestLogForStage.status)} className="ml-auto capitalize">{latestLogForStage.status}</Badge>
+            </h4>
+            {latestLogForStage.processedOutput && (
+              <div>
+                <Label className="text-xs text-muted-foreground">Processed Output</Label>
+                <pre className="text-xs p-2 bg-background rounded-sm overflow-auto max-h-40">
+                  {JSON.stringify(latestLogForStage.processedOutput, null, 2)}
+                </pre>
               </div>
             )}
-            {/* Retry Button */} 
-            {canRetry && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRetryStage}
-                  disabled={isRetrying || isValidating}
-                  className="border-blue-500 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                >
-                  {isRetrying ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RotateCcw className="mr-1 h-4 w-4" />} Retry Stage
-                </Button>
+            {latestLogForStage.rawOutput && (
+              <div>
+                <Label className="text-xs text-muted-foreground">Raw Output</Label>
+                <pre className="text-xs p-2 bg-background rounded-sm overflow-auto max-h-40">
+                  {latestLogForStage.rawOutput}
+                </pre>
+              </div>
             )}
+            {latestLogForStage.errorDetails && (
+              <div>
+                <Label className="text-xs text-destructive">Error Details</Label>
+                <pre className="text-xs p-2 bg-destructive/10 text-destructive rounded-sm overflow-auto max-h-40">
+                  {latestLogForStage.errorDetails}
+                </pre>
+              </div>
+            )}
+            {latestLogForStage.validationResult !== null && (
+               <p className="text-xs">Validation Result: <span className={`font-semibold ${latestLogForStage.validationResult ? 'text-green-600' : 'text-red-600'}`}>{latestLogForStage.validationResult ? 'Passed' : 'Failed'}</span></p>
+            )}
+             <p className="text-xs text-muted-foreground">Started: {new Date(latestLogForStage.startedAt).toLocaleString()} | Ended: {latestLogForStage.endedAt ? new Date(latestLogForStage.endedAt).toLocaleString() : 'N/A'}</p>
           </div>
-        </div>
+        )}
 
-        {/* Action Buttons Section */}
-        <div className="flex justify-between items-center pt-4 border-t flex-wrap gap-2"> {/* Added flex-wrap and gap */}
-          <Button
+        {/* Action Buttons */} 
+        <div className="flex flex-wrap justify-between items-center pt-4 border-t gap-2"> {/* Added gap and flex-wrap */} 
+          {/* Save Stage Button */} 
+          <Button 
+            onClick={handleSaveStage} 
+            disabled={isUpdatingStage || prompt === stage.promptTemplate}
             variant="outline"
-            onClick={onTriggerSnapshotDrawer}
-            aria-label="Manage Snapshots"
           >
-            <RefreshCcw className="mr-2 h-4 w-4" /> Snapshots
+            {isUpdatingStage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save Stage
           </Button>
-          <div className="flex space-x-2"> {/* Group save and start */}
-            <Button
-              variant="secondary"
-              onClick={handleSaveStage}
-              disabled={isUpdatingStage || prompt === stageDetail.promptTemplate}
-              aria-label="Save stage changes"
-            >
-              <Save className="mr-2 h-4 w-4" /> {isUpdatingStage ? 'Saving...' : 'Save Changes'}
+
+          {/* Snapshot Button */} 
+          <Button onClick={onTriggerSnapshotDrawer} variant="outline">
+            Manage Snapshots
+          </Button>
+
+          {/* Conditional Manual Validation Buttons */} 
+          {needsManualValidation && (
+            <div className="flex gap-2">
+              <Button onClick={() => handleManualValidation(true)} disabled={isValidating} variant="success"> {/* Use custom variant or style */} 
+                {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsUp className="mr-2 h-4 w-4" />}
+                Pass
+              </Button>
+              <Button onClick={() => handleManualValidation(false)} disabled={isValidating} variant="destructive">
+                {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsDown className="mr-2 h-4 w-4" />}
+                Fail
+              </Button>
+            </div>
+          )}
+
+          {/* Conditional Retry Button */} 
+          {canRetry && (
+            <Button onClick={handleRetryStage} disabled={isRetrying} variant="secondary">
+              {isRetrying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
+              Retry Stage (Attempt { (latestLogForStage?.attemptNumber ?? 0) + 1 }/{ stage.retryLimit })
             </Button>
-            <Button
-              onClick={handleStartExecution}
-              disabled={isStartingExecution}
-              aria-label="Start workflow execution"
-              title="Start execution of the parent workflow (Implementation Pending)" // Added title for clarity
-            >
-              <Play className="mr-2 h-4 w-4" /> {isStartingExecution ? 'Starting...' : 'Start Workflow'}
+          )}
+
+          {/* Start Execution Button (Consider moving this to the workflow level) */} 
+          {!currentExecutionId && (
+            <Button onClick={handleStartExecution} disabled={isStartingExecution}>
+              {isStartingExecution ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+              Start Workflow Execution
             </Button>
-          </div>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 };
+
+// Helper function (can be moved to utils)
+const getStatusVariant = (status: string | null | undefined): "default" | "secondary" | "destructive" | "outline" | "warning" => {
+  switch (status?.toUpperCase()) {
+    case 'COMPLETED':
+    case 'PASSED':
+      return 'default'; // Success (often green)
+    case 'FAILED':
+    case 'ERROR':
+      return 'destructive'; // Error (red)
+    case 'RUNNING':
+      return 'warning'; // In progress (often yellow/blue)
+    case 'PENDING':
+    case 'AWAITING_VALIDATION':
+      return 'secondary'; // Neutral/Waiting (gray)
+    case 'SKIPPED':
+      return 'outline'; // Skipped (outline)
+    default:
+      return 'secondary';
+  }
+}

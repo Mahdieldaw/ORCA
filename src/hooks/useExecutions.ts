@@ -2,11 +2,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Added useMutation, useQueryClient
 import {
   fetchExecutions,
+  fetchExecutionDetail, // Added fetchExecutionDetail
   fetchExecutionLogs,
   recordManualValidation, // Added
   retryStage,             // Added
   updateExecutionStatus,  // Added
   ExecutionSummary,
+  ExecutionDetail, // Added ExecutionDetail type
   ExecutionLog,
 } from '@/services/apiClient';
 
@@ -31,20 +33,33 @@ export const useGetExecutions = (filters: { workflowId?: string } = {}) => {
   });
 };
 
-// Hook to fetch logs for a specific execution
-export const useGetExecutionLogs = (executionId: string, options?: { enabled?: boolean }) => {
+// Hook to fetch details for a specific execution
+export const useGetExecutionDetail = (executionId: string | null | undefined) => {
+  return useQuery<ExecutionDetail, Error>({
+    queryKey: executionKeys.detail(executionId!),
+    queryFn: () => fetchExecutionDetail(executionId!),
+    enabled: !!executionId,
+    staleTime: 5 * 1000, // Fetch details relatively frequently if needed
+  });
+};
+
+// Hook to fetch logs for a specific execution, with polling based on execution status
+export const useGetExecutionLogs = (executionId: string | null | undefined, options?: { enabled?: boolean }) => {
+  // Fetch execution details to determine if polling should be active
+  const { data: executionDetail } = useGetExecutionDetail(executionId);
+  const isExecutionRunning = executionDetail?.status === 'RUNNING' || executionDetail?.status === 'PENDING';
+
   return useQuery<ExecutionLog[], Error>({
-    queryKey: executionKeys.log(executionId),
-    queryFn: () => fetchExecutionLogs(executionId),
-    enabled: options?.enabled ?? !!executionId, // Only run if executionId is provided and enabled
-    staleTime: 30 * 1000, // 30 seconds, logs might update frequently
+    queryKey: executionKeys.log(executionId!),
+    queryFn: () => fetchExecutionLogs(executionId!),
+    enabled: (options?.enabled ?? !!executionId) && !!executionDetail, // Only run if executionId is provided, enabled, and details are loaded
+    staleTime: 10 * 1000, // Logs can be slightly stale (10s)
     refetchInterval: (query) => {
-      // Refetch logs only if the execution is still potentially running
-      // This logic might need refinement based on how execution status is tracked
-      const lastLog = query.state.data?.[query.state.data.length - 1];
-      const isRunning = lastLog?.status === 'running' || lastLog?.status === 'pending'; // Example condition
-      return isRunning ? 5000 : false; // Refetch every 5 seconds if running
+      // Check the fetched execution status
+      return isExecutionRunning ? 5000 : false; // Refetch every 5 seconds ONLY if status is RUNNING/PENDING
     },
+    refetchIntervalInBackground: isExecutionRunning, // Allow background refetching if running
+    refetchOnWindowFocus: isExecutionRunning, // Refetch on focus only if running
   });
 };
 
@@ -54,11 +69,12 @@ export const useRecordManualValidation = () => {
   return useMutation<
     ExecutionLog, // Return type
     Error,        // Error type
-    { executionId: string; stageId: string; result: 'pass' | 'fail' } // Input variables
+    { executionId: string; stageId: string; validationResult: boolean; comments?: string } // Updated input variables
   >({
-    mutationFn: ({ executionId, stageId, result }) => recordManualValidation(executionId, stageId, result),
+    // Assuming apiClient.recordManualValidation is updated to accept { validationResult, comments }
+    mutationFn: (variables) => recordManualValidation(variables.executionId, variables.stageId, variables), 
     onSuccess: (updatedLog, variables) => {
-      console.log(`Manual validation recorded for stage ${variables.stageId}: ${variables.result}`, updatedLog);
+      console.log(`Manual validation recorded for stage ${variables.stageId}: ${variables.validationResult}`, updatedLog);
       // Invalidate logs for this execution to show the updated status
       queryClient.invalidateQueries({ queryKey: executionKeys.log(variables.executionId) });
       // Optionally invalidate the execution detail if status changes
@@ -75,13 +91,13 @@ export const useRecordManualValidation = () => {
 export const useRetryStage = () => {
   const queryClient = useQueryClient();
   return useMutation<
-    ExecutionLog, // Return type
+    ExecutionLog, // Return type (might be different based on API, e.g., StageExecution)
     Error,        // Error type
     { executionId: string; stageId: string } // Input variables
   >({
     mutationFn: ({ executionId, stageId }) => retryStage(executionId, stageId),
-    onSuccess: (newLog, variables) => {
-      console.log(`Stage ${variables.stageId} retry initiated:`, newLog);
+    onSuccess: (result, variables) => {
+      console.log(`Stage ${variables.stageId} retry initiated:`, result);
       // Invalidate logs to show the new attempt
       queryClient.invalidateQueries({ queryKey: executionKeys.log(variables.executionId) });
       // Invalidate execution detail as status/current stage might change
