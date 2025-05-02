@@ -364,25 +364,120 @@ Verify that your backend API route successfully authenticates the request using 
 This completes Task 6. The apiClient should now correctly attach the Clerk authentication token to client-side requests made to your backend API.
 
 Task 7: Code Cleanup
+Okay, AI Agent, let's complete Task 7: Code Cleanup.
 
-Consolidate Hooks:
+Based on the project status update, src/hooks/api/useExecutions.ts is deleted, and useStartExecution is confirmed to be defined in src/hooks/useWorkflows.ts. We need to move it and then proceed with the rest of the cleanup.
 
-Delete src/hooks/api/useExecutions.ts.
+Task 7: Code Cleanup
 
-Verify useStartWorkflowExecution is defined only in src/hooks/useExecutions.ts.
+Objective: Consolidate hooks into logical files, replace all remaining mock types with actual API types, and remove the mock data file and its imports.
 
-Delete the src/hooks/api/ directory.
+Step-by-Step Instructions:
 
-Refine Types:
+Consolidate useStartExecution Hook:
 
-Open src/components/workflows/StageCard.tsx. Change stage: MockStage prop to stage: WorkflowSummary | Stage (or a more specific type based on where it's used).
+Cut: Open src/hooks/useWorkflows.ts. Find the useStartExecution hook definition. Cut the entire function definition (from export function useStartExecution() { down to the closing }).
 
-Scan other components (HistoryEntry, SnapshotEntry, etc.) for any remaining MockX types in props and replace them with types from apiClient.ts.
+Paste: Open src/hooks/useExecutions.ts. Paste the cut useStartExecution hook definition into this file, likely near the other execution-related mutation hooks (useRecordManualValidation, useRetryStage).
 
-Remove Mock Data:
+Update Imports: Find any components that were importing useStartExecution from useWorkflows.ts (e.g., potentially src/app/explorer/page.tsx or src/components/workflows/StageController.tsx - check where it was used) and update the import path to point to @/hooks/useExecutions.
 
-Delete src/data/mockWorkflows.ts.
+Verify: Ensure there are no errors related to this move.
 
-Search the project (Ctrl+Shift+F or Cmd+Shift+F) for mockWorkflows and remove all related import statements.
+Delete src/hooks/api/ Directory:
 
-Execute these refined steps. This should bring Phase 3 to completion, resulting in a fully integrated frontend and backend for the core MVP features.
+Navigate to the src/hooks/ directory in your file explorer or IDE sidebar.
+
+Delete the entire api subdirectory (src/hooks/api/).
+
+Refine Component Prop Types:
+
+StageCard.tsx:
+
+Open src/components/workflows/StageCard.tsx.
+
+Import the correct API type. Based on how it's used in WorkflowExplorer, it seems to receive summary data. Import WorkflowSummary from @/services/apiClient.
+
+Change the stage prop type in StageCardProps from MockStage to WorkflowSummary:
+
+import { WorkflowSummary } from '@/services/apiClient'; // Add this import
+// ... other imports ...
+
+interface StageCardProps {
+  // stage: MockStage; // Remove this line
+  stage: WorkflowSummary; // Use the API type
+  workflowId: string; // Keep this if needed for delete/select
+  onClick: (workflowId: string) => void; // onClick likely selects the workflow
+  onDelete?: (workflowId: string, event: React.MouseEvent) => void; // onDelete uses workflowId
+}
+
+// ... rest of component ...
+
+// Inside the component, update references if needed:
+// e.g., use stage.name, stage.description instead of mock fields
+// Remove references to stage.order, stage.type, stage.status, stage.previewText if they don't exist on WorkflowSummary
+// Example update:
+export const StageCard: React.FC<StageCardProps> = ({ stage, workflowId, onClick, onDelete }) => {
+    // ... handleDelete ...
+    return (
+        <Card
+          className="relative group cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          onClick={() => onClick(workflowId)} // Pass workflowId
+          // ... rest of Card props ...
+        >
+          <CardHeader className="p-4">
+            <div className="flex justify-between items-center mb-1">
+               {/* Use fields from WorkflowSummary */}
+              <CardTitle className="text-base font-medium">{stage.name}</CardTitle>
+              {/* Remove getStatusIndicator if status isn't on WorkflowSummary */}
+            </div>
+            {/* Use description from WorkflowSummary */}
+            <CardDescription className="text-xs text-muted-foreground truncate">
+              {stage.description || 'No description'}
+            </CardDescription>
+          </CardHeader>
+          {/* Delete Button */}
+          {onDelete && (
+            <Button
+              variant="ghost" size="icon"
+              className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-10 text-destructive hover:bg-destructive/10"
+              onClick={(e) => onDelete(workflowId, e)} // Pass workflowId
+              aria-label={`Delete workflow ${stage.name}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </Card>
+    );
+};
+
+
+Update the usage in src/app/explorer/page.tsx (WorkflowExplorer component) to pass the correct workflow object as the stage prop and the workflow.id as workflowId.
+
+GhostOverlay.tsx (HistoryEntry):
+
+This component already correctly uses the ExecutionLog type from apiClient.ts. No change needed here.
+
+HybridThinkDrawer.tsx (SnapshotEntry):
+
+This component uses SnapshotSummary. No change needed here.
+
+SnapshotRestoreModal.tsx:
+
+Change snapshotToRestore: MockSnapshot | null prop to snapshotToRestore: SnapshotSummary | null.
+
+Update the import import { MockSnapshot } from '@/data/mockWorkflows'; to import { SnapshotSummary } from '@/services/apiClient';.
+
+Remove Mock Data File and Imports:
+
+Delete File: Delete the file src/data/mockWorkflows.ts.
+
+Remove Imports: Search the entire project (Ctrl+Shift+F or Cmd+Shift+F) for any remaining import { ... } from '@/data/mockWorkflows'; statements and remove them. Check components like StageController which might still have default props referencing mock data. Remove those defaults if they exist.
+
+Final Verification:
+
+Run npm run build (or yarn build) to check for any type errors or missing imports introduced during the cleanup.
+
+Run the development server (npm run dev) and manually test the core flows again (viewing workflows, opening editor/runner, viewing history/snapshots) to ensure nothing broke during the refactoring and mock data removal. Check the browser console for errors.
+
+This completes Task 7 and Phase 3. The codebase should now be consolidated, use correct API types, and be free of mock data dependencies, fully relying on the backend API integration. Proceed to Phase 4: Final Polish & Production Readiness.

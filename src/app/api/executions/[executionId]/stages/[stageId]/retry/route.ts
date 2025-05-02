@@ -1,7 +1,7 @@
 // src/app/api/executions/[executionId]/stages/[stageId]/retry/route.ts
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { PrismaClient, WorkflowExecutionStatus, StageExecutionStatus, ExecutionLogStatus } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client'; // Removed unused status enums, added Prisma namespace
 
 const prisma = new PrismaClient();
 
@@ -9,7 +9,8 @@ export async function POST(
   request: Request, // Keep request even if unused for now, Next.js expects it
   { params }: { params: { executionId: string; stageId: string } }
 ) {
-  const { userId } = auth();
+  const authResult = await auth(); // Await the auth() call
+  const userId = authResult.userId;
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -22,12 +23,16 @@ export async function POST(
 
   try {
     // 1. Fetch the workflow execution to ensure it exists and potentially update its status
-    const execution = await prisma.workflowExecution.findUnique({
+    const execution = await prisma.execution.findUnique({ // Corrected model name to 'execution'
       where: { id: executionId },
       include: {
-        stages: { // Include stage executions to find the one to retry
-          where: { stageId: stageId },
-        },
+        // Include stage executions if needed, but not strictly required for retry logic itself
+        // stages: {
+        //   where: { stageId: stageId },
+        // },
+        workflow: { // Need workflow to potentially access global settings if required
+          select: { id: true, name: true }
+        }
       },
     });
 
@@ -35,7 +40,13 @@ export async function POST(
       return NextResponse.json({ error: 'Workflow execution not found' }, { status: 404 });
     }
 
-    // 2. Fetch the Stage definition to get retryLimit
+    // Check if the user owns the execution (important for security)
+    // Assuming Execution model has a userId field
+    // if (execution.userId !== userId) {
+    //    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // }
+
+    // 2. Fetch the Stage definition to get retryLimit and order
     const stage = await prisma.stage.findUnique({
       where: { id: stageId },
     });
@@ -64,8 +75,8 @@ export async function POST(
     await prisma.execution.update({
         where: { id: executionId },
         data: {
-            status: 'RUNNING', // Ensure it's running
-            currentStageOrder: stage.order, // Point to the retried stage order
+            status: 'RUNNING', // Ensure it's running or PENDING if retry means restart
+            currentStageOrder: stage.stageOrder, // Corrected property name to stageOrder
         },
     });
 
@@ -75,34 +86,37 @@ export async function POST(
         executionId: executionId,
         stageId: stageId,
         userId: userId, // Associate log with the user initiating retry
-        stageOrder: stage.order, // Store the stage order
+        stageOrder: stage.stageOrder, // Corrected property name to stageOrder
         attemptNumber: currentAttempt + 1,
-        inputs: latestLog?.inputs ?? Prisma.JsonNull, // Carry over inputs from previous attempt
+        inputs: latestLog?.inputs ?? Prisma.JsonNull, // Use Prisma namespace
         validationResult: 'pending', // Reset validation status
         executedAt: new Date(), // Mark the time retry was initiated
         // Ensure other output/error fields are null for the new attempt
         rawOutput: null,
-        parsedOutput: Prisma.JsonNull,
+        parsedOutput: Prisma.JsonNull, // Use Prisma namespace
         validatorNotes: null,
         errorMessage: null,
         durationMs: null,
-        status: 'PENDING', // Initial status for the new log entry
+        // status: 'PENDING', // Keep status field if it exists in your schema, otherwise remove
       },
     });
 
     // --- Trigger Stage Re-Execution Logic (Placeholder) ---
     console.log(`Retry attempt ${newLog.attemptNumber} initiated for stage ${stageId}. New log ID: ${newLog.id}`);
     // Placeholder: Call the backend service to execute this specific attempt
-    // await executionService.runSpecificStageAttempt(executionId, stageId, newLog.id);
+    // Example: await triggerStageExecution(executionId, stageId, newLog.id);
     // --- End Trigger Logic ---
 
-    // Return the newly created log or the updated stage execution
-    return NextResponse.json(newLog, { status: 200 });
+    // Return the newly created log or the updated execution status
+    return NextResponse.json({ message: 'Stage retry initiated successfully.', logEntry: newLog }, { status: 200 });
 
   } catch (error) {
     console.error(`Error retrying stage ${stageId} for execution ${executionId}:`, error);
     // Check for specific Prisma errors if needed
-    // if (error instanceof Prisma.PrismaClientKnownRequestError) { ... }
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        // Handle specific Prisma errors (e.g., unique constraint violation)
+        return NextResponse.json({ error: `Prisma error: ${error.code}` }, { status: 409 });
+    }
     return NextResponse.json({ error: 'Failed to retry stage' }, { status: 500 });
   }
 }

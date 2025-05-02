@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal, History, Trash2, Loader2, AlertTriangle, RotateCcw } from 'lucide-react'; // Combined imports, Added RotateCcw
 import { useGetSnapshots, useRestoreSnapshot, useDeleteSnapshot, useCreateSnapshot } from '@/hooks/useSnapshots'; // Corrected import path for hooks
-import { useToast } from '@/components/ui/use-toast'; // Import useToast
+import { useToast } from '@/hooks/use-toast'; // Import useToast - Corrected path
 import { Input } from '@/components/ui/input'; // Added for snapshot name
 import { SnapshotSummary } from '@/services/apiClient'; // Import type
 import {

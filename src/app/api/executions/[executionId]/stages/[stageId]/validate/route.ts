@@ -9,7 +9,8 @@ export async function POST(
   request: Request,
   { params }: { params: { executionId: string; stageId: string } }
 ) {
-  const { userId } = auth();
+  const authResult = await auth(); // Await the auth() call
+  const userId = authResult.userId;
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }

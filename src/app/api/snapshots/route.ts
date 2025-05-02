@@ -8,7 +8,8 @@ const prisma = new PrismaClient();
 // GET /api/snapshots - Fetch all snapshots for the authenticated user
 export async function GET(request: Request) {
   try {
-    const { userId } = auth();
+    const authResult = await auth(); // Await the auth() call
+    const { userId } = authResult;
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -39,7 +40,8 @@ export async function GET(request: Request) {
 // POST /api/snapshots - Create a new snapshot for a workflow
 export async function POST(request: Request) {
   try {
-    const { userId } = auth();
+    const authResult = await auth(); // Await the auth() call
+    const { userId } = authResult;
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

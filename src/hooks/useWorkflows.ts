@@ -147,28 +147,6 @@ export function useDeleteStage() {
     });
 }
 
-// Hook for starting a workflow execution (Mutation)
-export function useStartExecution() {
-    const queryClient = useQueryClient();
-    return useMutation<
-        ExecutionSummary, // Type of data returned on success
-        Error,            // Type of error
-        { workflowId: string; inputs: any } // Type of variables passed to the mutation function
-    >({
-        mutationFn: ({ workflowId, inputs }) => startWorkflowExecution(workflowId, inputs),
-        onSuccess: (data) => {
-            console.log('Execution started successfully:', data);
-            // Invalidate queries related to executions list to refetch
-            queryClient.invalidateQueries({ queryKey: executionKeys.lists() });
-            // Optionally, you could pre-populate the cache for the new execution's details
-            // queryClient.setQueryData(executionKeys.detail(data.id), data);
-        },
-        onError: (error) => {
-            console.error('Error starting execution:', error);
-            // Handle error display to the user here (e.g., using a toast notification)
-        },
-    });
-}
 
 // Hook to fetch the list of executions (summary), optionally filtered by workflowId
 export function useGetExecutions(workflowId?: string) {

@@ -2,13 +2,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Added useMutation, useQueryClient
 import {
   fetchExecutions,
-  fetchExecutionDetail, // Added fetchExecutionDetail
+  fetchExecutionDetail,
   fetchExecutionLogs,
-  recordManualValidation, // Added
-  retryStage,             // Added
-  updateExecutionStatus,  // Added
+  recordManualValidation,
+  retryStage,
+  updateExecutionStatus,
+  startWorkflowExecution, // Added startWorkflowExecution
   ExecutionSummary,
-  ExecutionDetail, // Added ExecutionDetail type
+  ExecutionDetail,
   ExecutionLog,
 } from '@/services/apiClient';
 
@@ -17,8 +18,8 @@ const executionKeys = {
   all: ['executions'] as const,
   lists: () => [...executionKeys.all, 'list'] as const,
   list: (filters: Record<string, any>) => [...executionKeys.lists(), filters] as const,
-  details: () => [...executionKeys.all, 'detail'] as const, // Added details key
-  detail: (id: string) => [...executionKeys.details(), id] as const, // Added detail key
+  details: () => [...executionKeys.all, 'detail'] as const,
+  detail: (id: string) => [...executionKeys.details(), id] as const,
   logs: () => [...executionKeys.all, 'logs'] as const,
   log: (executionId: string) => [...executionKeys.logs(), executionId] as const,
 };
@@ -69,10 +70,9 @@ export const useRecordManualValidation = () => {
   return useMutation<
     ExecutionLog, // Return type
     Error,        // Error type
-    { executionId: string; stageId: string; validationResult: boolean; comments?: string } // Updated input variables
+    { executionId: string; stageId: string; validationResult: 'pass' | 'fail'; comments?: string } // Updated input variables
   >({
-    // Assuming apiClient.recordManualValidation is updated to accept { validationResult, comments }
-    mutationFn: (variables) => recordManualValidation(variables.executionId, variables.stageId, variables), 
+    mutationFn: (variables) => recordManualValidation(variables.executionId, variables.stageId, variables.validationResult),
     onSuccess: (updatedLog, variables) => {
       console.log(`Manual validation recorded for stage ${variables.stageId}: ${variables.validationResult}`, updatedLog);
       // Invalidate logs for this execution to show the updated status
@@ -134,7 +134,29 @@ export const useUpdateExecutionStatus = () => {
   });
 };
 
+// Hook for starting a workflow execution (Mutation)
+export const useStartExecution = () => {
+    const queryClient = useQueryClient();
+    return useMutation<
+        ExecutionSummary, // Type of data returned on success
+        Error,            // Type of error
+        { workflowId: string; inputs: any } // Type of variables passed to the mutation function
+    >({
+        mutationFn: ({ workflowId, inputs }) => startWorkflowExecution(workflowId, inputs),
+        onSuccess: (data) => {
+            console.log('Execution started successfully:', data);
+            // Invalidate queries related to executions list to refetch
+            queryClient.invalidateQueries({ queryKey: executionKeys.lists() });
+            // Optionally, you could pre-populate the cache for the new execution's details
+            // queryClient.setQueryData(executionKeys.detail(data.id), data);
+        },
+        onError: (error) => {
+            console.error('Error starting execution:', error);
+            // Handle error display to the user here (e.g., using a toast notification)
+        },
+    });
+};
+
 // Note: Mutations for starting/stopping/retrying executions would go here
-// export const useStartExecution = () => { ... }; // Moved to useWorkflows.ts
 // export const useStopExecution = () => { ... }; // Potentially use useUpdateExecutionStatus with 'cancelled' status
 // export const useRetryStage = () => { ... }; // Implemented above

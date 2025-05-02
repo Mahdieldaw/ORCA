@@ -14,7 +14,6 @@ import {
   AlertDialogTrigger, // Trigger would be placed elsewhere
 } from "@/components/ui/alert-dialog"; // Using AlertDialog for confirmation
 import { Button } from '@/components/ui/button';
-// import { MockSnapshot } from '@/data/mockWorkflows'; // Remove mock import
 import { SnapshotSummary } from '@/services/apiClient'; // Import correct type
 import { Loader2 } from 'lucide-react'; // Import loader icon
 

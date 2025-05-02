@@ -2,9 +2,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react'; // Added useEffect
-// Remove redundant useGetWorkflowDetail import
-// import { useGetWorkflowDetail, useUpdateStage } from '@/hooks/api/workflows'; 
-import { useUpdateStage } from '@/hooks/useStages'; // Corrected import path for useUpdateStage
+import { useUpdateStage } from '@/hooks/useWorkflows'; // Corrected import path for useUpdateStage
 import { Stage } from '@prisma/client'; // Import Stage type from Prisma
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -13,10 +11,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Ban, CircleCheck, CircleDashed, RefreshCcw, Save, Play, ThumbsUp, ThumbsDown, Loader2, RotateCcw, Info, AlertTriangle } from 'lucide-react'; // Added Info, AlertTriangle icons
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
-// Corrected import path for execution hooks
-import { useRecordManualValidation, useRetryStage, useGetExecutionLogs } from '@/hooks/useExecutions'; // Removed useStartWorkflowExecution
-import { useToast } from '@/components/ui/use-toast'; // Import useToast
-import { ExecutionLog } from '@/services/apiClient'; // Import ExecutionLog type
+// Corrected import path and name for execution hooks
+import { useStartExecution, useRecordManualValidation, useRetryStage, useGetExecutionLogs } from '@/hooks/useExecutions'; 
+import { useToast } from '@/components/ui/use-toast'; // Corrected useToast import path
+import { ExecutionLog, ExecutionSummary } from '@/services/apiClient'; // Import ExecutionLog and ExecutionSummary types
 
 // Map log status to badge variant (copied from GhostOverlay)
 const getStatusVariant = (status: string | null | undefined): "default" | "secondary" | "destructive" | "outline" => {
@@ -81,11 +79,8 @@ export const StageController: React.FC<StageControllerProps> = ({
   onTriggerSnapshotDrawer,
   latestLogForStage, // Receive the latest log for this stage
 }) => {
-  // Remove internal data fetching for stage details
-  // const { data: stageDetail, isLoading, error } = useGetWorkflowDetail(activeWorkflowId);
-
   // Instantiate the mutation hooks
-  // const { mutate: startExecution, isPending: isStartingExecution } = useStartWorkflowExecution(); // Removed - Moved to ActiveWorkflowView
+  const { mutate: startExecution, isPending: isStartingExecution } = useStartExecution(); // Corrected hook name
   const { mutate: updateStage, isPending: isUpdatingStage } = useUpdateStage(); // Instantiate update hook
   const { mutate: recordValidation, isPending: isValidating } = useRecordManualValidation(); // Validation hook
   const { mutate: retryStage, isPending: isRetrying } = useRetryStage(); // Retry hook
@@ -103,16 +98,39 @@ export const StageController: React.FC<StageControllerProps> = ({
     setPrompt(event.target.value);
   };
 
-  // Removed handleStartExecution - Moved to ActiveWorkflowView
+  const handleStartExecution = () => {
+    // Start the PARENT workflow
+    if (!workflowId) {
+      toast({ title: "Error", description: "Workflow ID is missing.", variant: "destructive" }); // Uncommented toast
+      console.error("Workflow ID is missing.");
+      return;
+    }
+    // TODO: Implement UI to collect initial inputs (Phase 3, Item 5)
+    const initialInputs = {}; // Placeholder for initial inputs
+    console.log(`Starting execution for workflow ${workflowId}`);
+    startExecution({ workflowId: workflowId, inputs: initialInputs }, {
+      onSuccess: (execution: ExecutionSummary) => { // Added type for execution
+        toast({ title: "Execution Started", description: `Workflow execution ${execution.id} initiated.` }); // Uncommented toast
+        console.log(`Workflow execution ${execution.id} initiated.`);
+        // TODO: Update state to reflect the new currentExecutionId
+      },
+      onError: (startError: Error) => { // Added type for startError
+        toast({ title: "Execution Failed", description: `Could not start workflow: ${startError.message}`, variant: "destructive" }); // Uncommented toast
+        console.error(`Could not start workflow: ${startError.message}`);
+      }
+    });
+  };
 
   // Handle saving the updated stage prompt
   const handleSaveStage = () => {
     if (!stage) {
-      toast({ title: "Error", description: "Cannot save, stage data missing.", variant: "destructive" });
+      toast({ title: "Error", description: "Cannot save, stage data missing.", variant: "destructive" }); // Uncommented toast
+      console.error("Cannot save, stage data missing.");
       return;
     }
     if (prompt === stage.promptTemplate) {
-        toast({ title: "No Changes", description: "The prompt has not been modified." });
+        toast({ title: "No Changes", description: "The prompt has not been modified." }); // Uncommented toast
+        console.log("The prompt has not been modified.");
         return;
     }
 
@@ -121,33 +139,39 @@ export const StageController: React.FC<StageControllerProps> = ({
       { workflowId: workflowId, stageId: stage.id, data: { promptTemplate: prompt } },
       {
         onSuccess: () => {
-          toast({ title: "Stage Saved", description: `Stage '${stage.name}' prompt updated successfully.` });
+          toast({ title: "Stage Saved", description: `Stage '${stage.name}' prompt updated successfully.` }); // Uncommented toast
+          console.log(`Stage '${stage.name}' prompt updated successfully.`);
           // Optionally refetch workflow details if needed
         },
-        onError: (saveError) => {
-          toast({ title: "Save Failed", description: `Could not update stage prompt: ${(saveError as Error).message}`, variant: "destructive" });
+        onError: (saveError: Error) => { // Added type for saveError
+          toast({ title: "Save Failed", description: `Could not update stage prompt: ${saveError.message}`, variant: "destructive" }); // Uncommented toast
+          console.error(`Could not update stage prompt: ${saveError.message}`);
         },
       }
     );
   };
 
   // Handle manual validation submission
-  const handleManualValidation = (validationResult: boolean) => { // Use boolean directly
+  const handleManualValidation = (isPass: boolean) => { // Use boolean locally
     if (!currentExecutionId || !stage) {
-      toast({ title: "Error", description: "Execution context or stage details missing for validation.", variant: "destructive" });
+      toast({ title: "Error", description: "Execution context or stage details missing for validation.", variant: "destructive" }); // Uncommented toast
+      console.error("Execution context or stage details missing for validation.");
       return;
     }
-    console.log(`Recording manual validation: ${validationResult ? 'Pass' : 'Fail'} for execution ${currentExecutionId}, stage ${stage.id}`);
-    // Assuming the hook now takes a boolean `validationResult`
+    const validationResult = isPass ? 'pass' : 'fail'; // Convert boolean to 'pass' | 'fail'
+    console.log(`Recording manual validation: ${validationResult} for execution ${currentExecutionId}, stage ${stage.id}`);
+    // Pass 'pass' or 'fail' string to the hook
     recordValidation(
-      { executionId: currentExecutionId, stageId: stage.id, validationResult: validationResult, comments: validationResult ? 'Manually passed' : 'Manually failed' }, // Pass boolean
+      { executionId: currentExecutionId, stageId: stage.id, validationResult: validationResult, comments: validationResult === 'pass' ? 'Manually passed' : 'Manually failed' },
       {
         onSuccess: () => {
-          toast({ title: "Validation Recorded", description: `Stage marked as ${validationResult ? 'Passed' : 'Failed'}.` });
+          toast({ title: "Validation Recorded", description: `Stage marked as ${validationResult}.` }); // Uncommented toast
+          console.log(`Stage marked as ${validationResult}.`);
           // Invalidation happens within the hook
         },
-        onError: (validationError) => {
-          toast({ title: "Validation Failed", description: `Could not record validation: ${(validationError as Error).message}`, variant: "destructive" });
+        onError: (validationError: Error) => { // Added type for validationError
+          toast({ title: "Validation Failed", description: `Could not record validation: ${validationError.message}`, variant: "destructive" }); // Uncommented toast
+          console.error(`Could not record validation: ${validationError.message}`);
         },
       }
     );
@@ -156,7 +180,8 @@ export const StageController: React.FC<StageControllerProps> = ({
   // Handle retrying a stage
   const handleRetryStage = () => {
     if (!currentExecutionId || !stage) {
-      toast({ title: "Error", description: "Execution context or stage details missing for retry.", variant: "destructive" });
+      toast({ title: "Error", description: "Execution context or stage details missing for retry.", variant: "destructive" }); // Uncommented toast
+      console.error("Execution context or stage details missing for retry.");
       return;
     }
     console.log(`Retrying stage ${stage.id} for execution ${currentExecutionId}`);
@@ -164,11 +189,13 @@ export const StageController: React.FC<StageControllerProps> = ({
       { executionId: currentExecutionId, stageId: stage.id },
       {
         onSuccess: () => {
-          toast({ title: "Retry Initiated", description: `Stage ${stage.name} is being retried.` });
+          toast({ title: "Retry Initiated", description: `Stage ${stage.name} is being retried.` }); // Uncommented toast
+          console.log(`Stage ${stage.name} is being retried.`);
           // Invalidation happens within the hook
         },
-        onError: (retryError) => {
-          toast({ title: "Retry Failed", description: `Could not retry stage: ${(retryError as Error).message}`, variant: "destructive" });
+        onError: (retryError: Error) => { // Added type for retryError
+          toast({ title: "Retry Failed", description: `Could not retry stage: ${retryError.message}`, variant: "destructive" }); // Uncommented toast
+          console.error(`Could not retry stage: ${retryError.message}`);
         },
       }
     );
@@ -176,145 +203,187 @@ export const StageController: React.FC<StageControllerProps> = ({
 
   // Determine stage status based on the latest log
   const stageStatus = latestLogForStage?.status ?? 'PENDING'; // Default to PENDING if no log
-  const canRetry = (stageStatus === 'FAILED' || stageStatus === 'ERROR') && 
+  const canRetry = (stageStatus === 'FAILED' || stageStatus === 'ERROR') &&
                    (latestLogForStage?.attemptNumber ?? 0) < (stage.retryLimit ?? 0);
   const needsManualValidation = stage.validationType === 'MANUAL' && stageStatus === 'AWAITING_VALIDATION';
 
-  // Handle Loading State - Now handled by the parent component (`ActiveWorkflowView`)
-  // if (isLoading) { ... }
-  // Handle Error State - Now handled by the parent component
-  // if (error) { ... }
-  // Handle No Data State - Now handled by the parent component
-  // if (!stageDetail) { ... }
+  // Loading state for the stage data itself (now passed as prop, so no internal loading)
+  // if (isLoading) {
+  //   return <Skeleton className="h-[400px] w-full" />; // Adjust size as needed
+  // }
+
+  // Error state for stage data (now handled by parent component)
+  // if (error) {
+  //   return <div className="text-red-500">Error loading stage: {error.message}</div>;
+  // }
+
+  // If stage data is not yet available (passed as prop)
+  if (!stage) {
+    return <div>Stage data not available.</div>; // Or a more sophisticated loading/error state
+  }
 
   return (
-    <Card className="w-full mb-6"> {/* Added margin-bottom */} 
+    // TODO: Uncomment Card structure when component is available
+    <Card className="w-full h-full flex flex-col">
       <CardHeader>
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle>{stage.name || 'Untitled Stage'}</CardTitle>
-            <CardDescription>{stage.description || 'No description provided.'}</CardDescription>
+        <CardTitle className="flex items-center justify-between">
+          <span>{stage.name || 'Unnamed Stage'}</span>
+          <div className="flex items-center space-x-2">
+            <ValidationStatusIndicator type={stage.validationType} criteria={stage.validationCriteria} />
+            {/* Display current stage status */}
+            <Badge variant={getStatusVariant(stageStatus)}>{stageStatus}</Badge>
           </div>
-          <ValidationStatusIndicator type={stage.validationType} criteria={stage.validationCriteria} />
-          </div>
-          {/* Display current stage status based on latest log */} 
-          {latestLogForStage && (
-            <Badge variant={getStatusVariant(latestLogForStage.status)} className="capitalize ml-2">
-              {latestLogForStage.status}
-            </Badge>
-          )}
-        </div>
+        </CardTitle>
+        <CardDescription>{stage.description || 'No description provided.'}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Prompt Editor */} 
-        <div>
+      <CardContent className="flex-grow flex flex-col space-y-4">
+        <div className="space-y-2 flex-grow flex flex-col">
           <Label htmlFor={`prompt-${stage.id}`}>Prompt Template</Label>
           <Textarea
             id={`prompt-${stage.id}`}
             value={prompt}
             onChange={handlePromptChange}
-            placeholder="Enter the prompt for this stage..."
-            rows={8} // Increased rows for better visibility
-            className="mt-1"
-            disabled={isUpdatingStage}
+            placeholder="Enter the prompt template for this stage..."
+            className="flex-grow min-h-[150px] resize-none" // Ensure textarea grows
+            disabled={isUpdatingStage || isStartingExecution || isValidating || isRetrying}
           />
         </div>
 
-        {/* Display Execution Output/Error if available */} 
+        {/* Display latest execution result for this stage */}
         {latestLogForStage && (
-          <div className="space-y-2 p-3 border rounded-md bg-muted/50">
-            <h4 className="text-sm font-medium flex items-center">
-              <Info className="h-4 w-4 mr-2 text-muted-foreground" />
-              Latest Execution Log (Attempt {latestLogForStage.attemptNumber})
-              <Badge variant={getStatusVariant(latestLogForStage.status)} className="ml-auto capitalize">{latestLogForStage.status}</Badge>
-            </h4>
-            {latestLogForStage.processedOutput && (
-              <div>
-                <Label className="text-xs text-muted-foreground">Processed Output</Label>
-                <pre className="text-xs p-2 bg-background rounded-sm overflow-auto max-h-40">
-                  {JSON.stringify(latestLogForStage.processedOutput, null, 2)}
-                </pre>
-              </div>
-            )}
-            {latestLogForStage.rawOutput && (
-              <div>
-                <Label className="text-xs text-muted-foreground">Raw Output</Label>
-                <pre className="text-xs p-2 bg-background rounded-sm overflow-auto max-h-40">
-                  {latestLogForStage.rawOutput}
-                </pre>
-              </div>
-            )}
-            {latestLogForStage.errorDetails && (
-              <div>
-                <Label className="text-xs text-destructive">Error Details</Label>
-                <pre className="text-xs p-2 bg-destructive/10 text-destructive rounded-sm overflow-auto max-h-40">
-                  {latestLogForStage.errorDetails}
-                </pre>
-              </div>
-            )}
-            {latestLogForStage.validationResult !== null && (
-               <p className="text-xs">Validation Result: <span className={`font-semibold ${latestLogForStage.validationResult ? 'text-green-600' : 'text-red-600'}`}>{latestLogForStage.validationResult ? 'Passed' : 'Failed'}</span></p>
-            )}
-             <p className="text-xs text-muted-foreground">Started: {new Date(latestLogForStage.startedAt).toLocaleString()} | Ended: {latestLogForStage.endedAt ? new Date(latestLogForStage.endedAt).toLocaleString() : 'N/A'}</p>
-          </div>
+          <Card className="mt-4 bg-muted/30 border-dashed">
+            <CardHeader className="pb-2 pt-3 px-4">
+              <CardTitle className="text-sm flex justify-between items-center">
+                <span>Latest Result</span>
+                <Badge variant={getStatusVariant(latestLogForStage.status)} className="capitalize text-xs">
+                  {latestLogForStage.status?.replace('_', ' ') ?? 'Unknown'}
+                </Badge>
+              </CardTitle>
+              {currentExecutionId && <CardDescription className="text-xs">Execution ID: {currentExecutionId.substring(0, 8)}...</CardDescription>}
+            </CardHeader>
+            <CardContent className="px-4 pb-3">
+              {latestLogForStage.status === 'failed' && latestLogForStage.errorDetails && (
+                <div className="text-destructive text-xs p-2 bg-destructive/10 rounded border border-destructive/20">
+                  <p className="font-medium mb-1 flex items-center"><AlertTriangle className="h-4 w-4 mr-1.5"/>Error:</p>
+                  <pre className="whitespace-pre-wrap font-mono text-[11px]">{latestLogForStage.errorDetails}</pre>
+                </div>
+              )}
+              {(latestLogForStage.status === 'completed' || latestLogForStage.status === 'passed') && latestLogForStage.outputData && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Output:</Label>
+                  <pre className="text-xs whitespace-pre-wrap bg-background p-2 rounded border mt-1 font-mono text-[11px] max-h-40 overflow-auto">{JSON.stringify(latestLogForStage.outputData, null, 2)}</pre>
+                </div>
+              )}
+               {latestLogForStage.status === 'running' && (
+                <p className="text-sm text-blue-600 flex items-center"><Loader2 className="h-4 w-4 mr-2 animate-spin" />Running...</p>
+              )}
+               {latestLogForStage.status === 'awaiting_validation' && (
+                <p className="text-sm text-yellow-600 flex items-center"><Info className="h-4 w-4 mr-2" />Awaiting Manual Validation</p>
+              )}
+               {/* Add case for pending or other statuses if needed */}
+               {!latestLogForStage.errorDetails && !latestLogForStage.outputData && !['running', 'awaiting_validation', 'failed', 'completed', 'passed'].includes(latestLogForStage.status ?? '') && (
+                  <p className="text-xs text-muted-foreground italic">No output or error recorded for this status.</p>
+               )}
+            </CardContent>
+          </Card>
         )}
 
-        {/* Display Latest Log Details if available */} 
-        {latestLogForStage && (
-          <div className="mt-4 p-3 border rounded-md bg-muted/30 text-xs space-y-2">
-            <h4 className="text-sm font-medium mb-1">Latest Attempt Details (Attempt {latestLogForStage.attemptNumber ?? 'N/A'})</h4>
-            <p className="text-muted-foreground">Executed: {new Date(latestLogForStage.completedAt ?? latestLogForStage.startedAt).toLocaleString()}</p>
-            {latestLogForStage.inputData && <div><Label className="text-xxs uppercase text-muted-foreground">Inputs:</Label><pre className="text-xxs bg-background/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(latestLogForStage.inputData, null, 2)}</pre></div>}
-            {(latestLogForStage.outputData || latestLogForStage.processedOutput) && <div><Label className="text-xxs uppercase text-muted-foreground">Output:</Label><pre className="text-xxs bg-background/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(latestLogForStage.outputData ?? latestLogForStage.processedOutput, null, 2)}</pre></div>}
-            {latestLogForStage.errorDetails && <p className="text-destructive mt-1 flex items-center"><AlertTriangle className="h-3 w-3 mr-1"/> Error: {latestLogForStage.errorDetails}</p>}
-            {/* Add other relevant fields from ExecutionLog if needed */}
-          </div>
-        )}
-
-        {/* Action Buttons */} 
-        <div className="flex flex-wrap justify-between items-center pt-4 border-t gap-2"> {/* Added gap and flex-wrap */} 
-          {/* Save Stage Button */} 
-          <Button 
-            onClick={handleSaveStage} 
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-2 justify-end pt-4 border-t">
+          {/* Save Prompt Button */}
+          <Button
+            onClick={handleSaveStage}
             disabled={isUpdatingStage || prompt === stage.promptTemplate}
-            variant="outline"
+            size="sm"
           >
             {isUpdatingStage ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Stage
+            Save Prompt
           </Button>
 
-          {/* Snapshot Button */} 
-          <Button onClick={onTriggerSnapshotDrawer} variant="outline">
-            Manage Snapshots
-          </Button>
-
-          {/* Conditional Manual Validation Buttons */} 
-          {needsManualValidation && (
-            <div className="flex gap-2">
-              <Button onClick={() => handleManualValidation(true)} disabled={isValidating} variant="success"> {/* Use custom variant or style */} 
-                {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsUp className="mr-2 h-4 w-4" />}
-                Pass
-              </Button>
-              <Button onClick={() => handleManualValidation(false)} disabled={isValidating} variant="destructive">
-                {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsDown className="mr-2 h-4 w-4" />}
-                Fail
-              </Button>
-            </div>
-          )}
-
-          {/* Conditional Retry Button */} 
-          {canRetry && (
-            <Button onClick={handleRetryStage} disabled={isRetrying} variant="secondary">
-              {isRetrying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />}
-              Retry Stage (Attempt { (latestLogForStage?.attemptNumber ?? 0) + 1 }/{ stage.retryLimit })
+          {/* Start Execution Button (Only if no current execution) */}
+          {!currentExecutionId && (
+            <Button
+              onClick={handleStartExecution}
+              disabled={isStartingExecution}
+              size="sm"
+              variant="default" // Make it prominent
+            >
+              {isStartingExecution ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+              Start Workflow
             </Button>
           )}
 
-          {/* Start Execution Button Removed - Moved to ActiveWorkflowView */}
+          {/* Manual Validation Buttons (if applicable) */}
+          {needsManualValidation && currentExecutionId && (
+            <>
+              <Button
+                onClick={() => handleManualValidation(true)} // Pass true for 'Pass'
+                disabled={isValidating}
+                size="sm"
+                variant="outline"
+                className="text-green-600 border-green-600 hover:bg-green-50"
+              >
+                {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsUp className="mr-2 h-4 w-4" />}
+                Pass
+              </Button>
+              <Button
+                onClick={() => handleManualValidation(false)} // Pass false for 'Fail'
+                disabled={isValidating}
+                size="sm"
+                variant="destructive"
+              >
+                {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsDown className="mr-2 h-4 w-4" />}
+                Fail
+              </Button>
+            </>
+          )}
+
+          {/* Retry Button (if applicable) - Show if automated, execution exists, and status is failed/error and within retry limit */} 
+          {stage.stageType === 'AUTOMATED' && currentExecutionId && (stageStatus === 'FAILED' || stageStatus === 'ERROR') && canRetry && (
+            <Button
+              onClick={handleRetryStage}
+              disabled={isRetrying || isStartingExecution || isValidating} // Disable if other actions are pending
+              variant="secondary"
+              size="sm"
+              className="flex items-center"
+              title={`Retry this stage (Attempt ${latestLogForStage?.attemptNumber ?? 0} of ${stage.retryLimit ?? 0})`}
+            >
+              {isRetrying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
+              Retry Stage ({latestLogForStage?.attemptNumber ?? 0}/{stage.retryLimit ?? 0})
+            </Button>
+          )}
+          {/* Consider adding a 'Run Stage' button if the stage hasn't run yet in the current execution? */}
+
+          {/* Trigger Snapshot Drawer Button */}
+          <Button onClick={onTriggerSnapshotDrawer} variant="outline" size="sm">
+            <Info className="mr-2 h-4 w-4" />
+            View Snapshots
+          </Button>
+
         </div>
       </CardContent>
     </Card>
   );
 };
 
-// Removed duplicate helper function
+// Helper function (can be moved to utils)
+// Removed duplicate function definition
+// const getStatusVariant = (status: string | null | undefined): "default" | "secondary" | "destructive" | "outline" | "warning" => {
+//   switch (status?.toUpperCase()) {
+//     case 'COMPLETED':
+//     case 'PASSED':
+//       return 'default'; // Success (often green)
+//     case 'FAILED':
+//     case 'ERROR':
+//       return 'destructive'; // Error (red)
+//     case 'RUNNING':
+//       return 'warning'; // In progress (often yellow/blue)
+//     case 'PENDING':
+//     case 'AWAITING_VALIDATION':
+//       return 'secondary'; // Neutral/Waiting (gray)
+//     case 'SKIPPED':
+//       return 'outline'; // Skipped (outline)
+//     default:
+//       return 'secondary';
+//   }
+// }

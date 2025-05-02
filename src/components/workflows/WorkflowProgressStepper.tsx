@@ -75,7 +75,7 @@ export const WorkflowProgressStepper: React.FC<WorkflowProgressStepperProps> = (
   }
 
   // Sort stages by their order
-  const sortedStages = [...stages].sort((a, b) => a.order - b.order);
+  const sortedStages = [...stages].sort((a, b) => a.stageOrder - b.stageOrder);
 
   return (
     <div className="flex items-center space-x-2 overflow-x-auto p-2 bg-muted rounded-md mb-4">
@@ -95,7 +95,7 @@ export const WorkflowProgressStepper: React.FC<WorkflowProgressStepperProps> = (
               <div className={cn('w-8 h-8 rounded-full flex items-center justify-center mb-1', bgColor)}>
                 <Icon className={cn('w-5 h-5', color, animate)} />
               </div>
-              <span className="text-xs font-medium truncate max-w-[90px]" title={stage.name}>{stage.name}</span>
+              <span className="text-xs font-medium truncate max-w-[90px]" title={stage.name ?? 'Unnamed Stage'}>{stage.name ?? 'Unnamed Stage'}</span>
               <Badge variant={status === 'failed' ? 'destructive' : status === 'completed' ? 'default' : 'secondary'} className="text-xxs capitalize mt-1">
                 {status.replace('_', ' ')}
               </Badge>
