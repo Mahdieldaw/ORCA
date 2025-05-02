@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Ban, CircleCheck, CircleDashed, RefreshCcw, Save, Play, ThumbsUp, ThumbsDown, Loader2, RotateCcw, Info, AlertTriangle } from 'lucide-react'; // Added Info, AlertTriangle icons
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 // Corrected import path for execution hooks
-import { useStartWorkflowExecution, useRecordManualValidation, useRetryStage, useGetExecutionLogs } from '@/hooks/useExecutions'; 
+import { useRecordManualValidation, useRetryStage, useGetExecutionLogs } from '@/hooks/useExecutions'; // Removed useStartWorkflowExecution
 import { useToast } from '@/components/ui/use-toast'; // Import useToast
 import { ExecutionLog } from '@/services/apiClient'; // Import ExecutionLog type
 
@@ -85,7 +85,7 @@ export const StageController: React.FC<StageControllerProps> = ({
   // const { data: stageDetail, isLoading, error } = useGetWorkflowDetail(activeWorkflowId);
 
   // Instantiate the mutation hooks
-  const { mutate: startExecution, isPending: isStartingExecution } = useStartWorkflowExecution();
+  // const { mutate: startExecution, isPending: isStartingExecution } = useStartWorkflowExecution(); // Removed - Moved to ActiveWorkflowView
   const { mutate: updateStage, isPending: isUpdatingStage } = useUpdateStage(); // Instantiate update hook
   const { mutate: recordValidation, isPending: isValidating } = useRecordManualValidation(); // Validation hook
   const { mutate: retryStage, isPending: isRetrying } = useRetryStage(); // Retry hook
@@ -103,25 +103,7 @@ export const StageController: React.FC<StageControllerProps> = ({
     setPrompt(event.target.value);
   };
 
-  const handleStartExecution = () => {
-    // Start the PARENT workflow
-    if (!workflowId) {
-      toast({ title: "Error", description: "Workflow ID is missing.", variant: "destructive" });
-      return;
-    }
-    // TODO: Implement UI to collect initial inputs (Phase 3, Item 5)
-    const initialInputs = {}; // Placeholder for initial inputs
-    console.log(`Starting execution for workflow ${workflowId}`);
-    startExecution({ workflowId: workflowId, inputs: initialInputs }, {
-      onSuccess: (execution) => {
-        toast({ title: "Execution Started", description: `Workflow execution ${execution.id} initiated.` });
-        // TODO: Update state to reflect the new currentExecutionId
-      },
-      onError: (startError) => {
-        toast({ title: "Execution Failed", description: `Could not start workflow: ${(startError as Error).message}`, variant: "destructive" });
-      }
-    });
-  };
+  // Removed handleStartExecution - Moved to ActiveWorkflowView
 
   // Handle saving the updated stage prompt
   const handleSaveStage = () => {
@@ -328,36 +310,11 @@ export const StageController: React.FC<StageControllerProps> = ({
             </Button>
           )}
 
-          {/* Start Execution Button (Consider moving this to the workflow level) */} 
-          {!currentExecutionId && (
-            <Button onClick={handleStartExecution} disabled={isStartingExecution}>
-              {isStartingExecution ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-              Start Workflow Execution
-            </Button>
-          )}
+          {/* Start Execution Button Removed - Moved to ActiveWorkflowView */}
         </div>
       </CardContent>
     </Card>
   );
 };
 
-// Helper function (can be moved to utils)
-const getStatusVariant = (status: string | null | undefined): "default" | "secondary" | "destructive" | "outline" | "warning" => {
-  switch (status?.toUpperCase()) {
-    case 'COMPLETED':
-    case 'PASSED':
-      return 'default'; // Success (often green)
-    case 'FAILED':
-    case 'ERROR':
-      return 'destructive'; // Error (red)
-    case 'RUNNING':
-      return 'warning'; // In progress (often yellow/blue)
-    case 'PENDING':
-    case 'AWAITING_VALIDATION':
-      return 'secondary'; // Neutral/Waiting (gray)
-    case 'SKIPPED':
-      return 'outline'; // Skipped (outline)
-    default:
-      return 'secondary';
-  }
-}
+// Removed duplicate helper function

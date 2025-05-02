@@ -8,14 +8,14 @@ import { GhostOverlay } from '@/components/workflows/GhostOverlay'; // Import th
 import GlobalLayout from '@/components/layout/GlobalLayout'; // Adjust import path if needed
 import { StageCard } from '@/components/workflows/StageCard'; // Adjust import path if needed
 // Updated imports for workflow hooks
-import { useGetWorkflows, useDeleteWorkflow, useGetWorkflowDetail, useUpdateWorkflow } from '@/hooks/useWorkflows'; 
+import { useGetWorkflows, useDeleteWorkflow, useGetWorkflowDetail, useUpdateWorkflow } from '@/hooks/useWorkflows';
 import { useWorkflowStore } from '@/store/workflowStore'; // Import the Zustand store
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton for loading state
 import { Button } from '@/components/ui/button'; // Import Button
 import { Input } from '@/components/ui/input'; // Import Input
 import { Textarea } from '@/components/ui/textarea'; // Import Textarea
 import { Label } from '@/components/ui/label'; // Import Label
-import { Trash2, Save } from 'lucide-react'; // Import Trash icon and Save icon
+import { Trash2, Save, Play } from 'lucide-react'; // Import Trash, Save, Play icons
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,8 +28,9 @@ import {
 } from '@/components/ui/alert-dialog'; // Import AlertDialog for confirmation
 import { useToast } from '@/components/ui/use-toast'; // Import useToast for feedback
 import { WorkflowDetail, Stage, ExecutionLog } from '@/services/apiClient'; // Import API types
-import { useGetExecutionLogs } from '@/hooks/useExecutions'; // Import hook for logs
+import { useGetExecutionLogs, useStartWorkflowExecution } from '@/hooks/useExecutions'; // Import hook for logs & starting execution
 import { WorkflowProgressStepper } from '@/components/workflows/WorkflowProgressStepper'; // Import the stepper
+import { StartExecutionModal } from '@/components/workflows/StartExecutionModal'; // Import the new modal
 
 // Define a type for the workflow data expected from the API
 // Adjust this based on the actual API response structure
@@ -131,8 +132,8 @@ const WorkflowExplorer = () => {
       {workflows.map((workflow: ApiWorkflow) => (
         // Using a simple div wrapper for layout and hover group
         <div key={workflow.id} className="relative group border rounded-lg overflow-hidden hover:shadow-md transition-shadow duration-200">
-          <div 
-            className="p-4 cursor-pointer" 
+          <div
+            className="p-4 cursor-pointer"
             onClick={() => handleWorkflowSelect(workflow.id)}
             role="button"
             tabIndex={0}
@@ -267,6 +268,10 @@ const ActiveWorkflowView = ({ workflowId, currentExecutionId }: { workflowId: st
     refetchInterval: 5000, // Optional: Refetch logs periodically
   });
   const [activeStage, setActiveStage] = useState<Stage | null>(null);
+  const [isStartModalOpen, setIsStartModalOpen] = useState(false); // State for the modal
+  const { mutate: startExecution, isPending: isStartingExecution } = useStartWorkflowExecution(); // Hook to start execution
+  const { toast } = useToast(); // Hook for showing toasts
+  const { setCurrentExecutionId } = useWorkflowStore(); // Get setter for execution ID from store
 
   // Refetch detail when workflowId changes
   useEffect(() => {
@@ -302,6 +307,23 @@ const ActiveWorkflowView = ({ workflowId, currentExecutionId }: { workflowId: st
     return <div className="p-4 border rounded-lg text-muted-foreground">Select a workflow to see details.</div>;
   }
 
+  // Handler for submitting inputs from the modal
+  const handleSubmitInputs = (inputs: Record<string, any>) => {
+    console.log(`Starting execution for workflow ${workflowId} with inputs:`, inputs);
+    startExecution({ workflowId: workflowId, inputs: inputs }, {
+      onSuccess: (execution) => {
+        toast({ title: "Execution Started", description: `Workflow execution ${execution.id} initiated.` });
+        setCurrentExecutionId(execution.id); // Update global state with the new execution ID
+        setIsStartModalOpen(false); // Close modal on success
+        // Optionally refetch logs or workflow details if needed
+      },
+      onError: (startError) => {
+        toast({ title: "Execution Failed", description: `Could not start workflow: ${(startError as Error).message}`, variant: "destructive" });
+        // Keep modal open on error
+      }
+    });
+  };
+
   // Find the latest log for the currently active stage
   const latestLogForActiveStage = activeStage && logs
     ? logs
@@ -311,6 +333,13 @@ const ActiveWorkflowView = ({ workflowId, currentExecutionId }: { workflowId: st
 
   return (
     <div className="p-4 border rounded-lg">
+      {/* Add Start Execution Button if no execution is active and stages exist */}
+      {!currentExecutionId && workflowDetail?.stages && workflowDetail.stages.length > 0 && (
+        <Button onClick={() => setIsStartModalOpen(true)} className="mb-4">
+          <Play className="mr-2 h-4 w-4" />
+          Start Execution
+        </Button>
+      )}
       <WorkflowDetailEditor workflowId={workflowId} />
 
       {/* Workflow Progress Stepper - Display if stages exist */}
@@ -322,7 +351,7 @@ const ActiveWorkflowView = ({ workflowId, currentExecutionId }: { workflowId: st
         />
       )}
 
-      {/* Display Loading/Error for Logs */} 
+      {/* Display Loading/Error for Logs */}
       {isLoadingLogs && <p className="text-sm text-muted-foreground my-2">Loading execution logs...</p>}
       {logsError && <p className="text-sm text-destructive my-2">Error loading logs: {logsError.message}</p>}
 
@@ -357,19 +386,25 @@ const ActiveWorkflowView = ({ workflowId, currentExecutionId }: { workflowId: st
             // TODO: Pass onTriggerSnapshotDrawer if needed
             onTriggerSnapshotDrawer={() => console.log('Trigger snapshot drawer from StageController')} // Placeholder
             // onSaveSuccess is not a prop of StageController, remove or handle differently
-            /* onSaveSuccess={() => { 
+            /* onSaveSuccess={() => {
               setActiveStage(null); // Optionally close controller on save
               refetchDetail(); // Refetch details to show updated stage list/data
             }} */
             // onCancel is not a prop of StageController, remove or handle differently
             // onCancel={() => setActiveStage(null)} // Close controller on cancel
-              setActiveStage(null); // Optionally close controller on save
-              refetchDetail(); // Refetch details to show updated stage list/data
-            }}
-            onCancel={() => setActiveStage(null)} // Close controller on cancel
           />
         </div>
       )}
+
+      {/* Render the Start Execution Modal */}
+      <StartExecutionModal
+        isOpen={isStartModalOpen}
+        onOpenChange={setIsStartModalOpen}
+        workflowId={workflowId}
+        workflowName={workflowDetail?.name || 'Workflow'}
+        onSubmit={handleSubmitInputs}
+        isStartingExecution={isStartingExecution}
+      />
     </div>
   );
 };
@@ -397,7 +432,7 @@ export default function WorkflowExplorerPage() {
     <GlobalLayout>
        {/* Main content area */}
        <div className="container mx-auto p-4 md:p-6 lg:p-8">
-         {/* Page Title and Back Button */} 
+         {/* Page Title and Back Button */}
          <div className="flex items-center mb-6">
            {activeWorkflowId && (
              <Button variant="outline" size="sm" onClick={handleGoBackToList} className="mr-4">
@@ -409,7 +444,7 @@ export default function WorkflowExplorerPage() {
            </h1>
          </div>
 
-         {/* Conditionally render ActiveWorkflowView or WorkflowExplorer list */} 
+         {/* Conditionally render ActiveWorkflowView or WorkflowExplorer list */}
          {activeWorkflowId ? (
            <ActiveWorkflowView workflowId={activeWorkflowId} currentExecutionId={currentExecutionId} /> // Pass currentExecutionId
          ) : (
@@ -417,7 +452,7 @@ export default function WorkflowExplorerPage() {
          )}
 
          {/* Overlay for Execution History - Rendered conditionally based on isOverlayOpen */}
-         {/* Assuming GhostOverlay needs an executionId */} 
+         {/* Assuming GhostOverlay needs an executionId */}
          {currentExecutionId && (
            <GhostOverlay
              isOpen={isOverlayOpen}

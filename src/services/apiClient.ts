@@ -8,34 +8,31 @@ const apiClient = axios.create({
 });
 
 // Add a request interceptor to include the auth token
-// IMPORTANT: Replace this with your actual auth token retrieval logic (e.g., from Clerk, Supabase, etc.)
 apiClient.interceptors.request.use(async (config) => {
-  // Example using Clerk's __session cookie (adjust if using localStorage or other methods)
-  // This is a simplified example and might need refinement based on your auth setup.
-  // Consider using official SDK helpers for token management.
   let token: string | null = null;
-  if (typeof window !== 'undefined') {
-    // Attempt to get token from common storage methods
-    const clerkToken = document.cookie.split('; ').find(row => row.startsWith('__session='))?.split('=')[1];
-    const supabaseTokenData = localStorage.getItem('supabase.auth.token'); // Example for Supabase
 
-    if (clerkToken) {
-        token = clerkToken; // Use Clerk session token directly if available
-    } else if (supabaseTokenData) {
-        try {
-            const parsedToken = JSON.parse(supabaseTokenData);
-            token = parsedToken.access_token; // Adjust based on actual Supabase token structure
-        } catch (e) {
-            console.error("Error parsing Supabase token from localStorage", e);
-        }
+  // Ensure this runs only on the client-side where Clerk context is available
+  if (typeof window !== 'undefined') {
+    try {
+      // Use Clerk's recommended client-side token retrieval function
+      token = await getToken();
+      // console.log("Clerk token fetched:", token ? "Yes" : "No"); // Optional: for debugging
+    } catch (error) {
+      console.error("Error fetching Clerk token:", error);
+      // Handle token fetching errors if necessary, though getToken usually handles internal states
     }
-    // Add other potential token sources if needed
   }
 
+  // Add the fetched Clerk token to the header if it exists
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  } else {
+     // Optional: Decide if you want to remove any potentially stale Authorization header if no token is found
+     // delete config.headers.Authorization;
+     console.log("No Clerk token found, request sent without Authorization header.");
   }
-  return config;
+
+  return config; // Return the modified config
 }, (error) => {
   console.error('Axios request error:', error);
   return Promise.reject(error);

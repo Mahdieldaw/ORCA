@@ -302,48 +302,66 @@ Trigger: Modify the "Start Workflow Execution" button (currently in StageControl
 
 Pass Data: On form submission within the modal, call the startExecution mutation, passing the collected inputs object.
 
+here are the corrected and specific instructions for Task 6: Finalize Auth Token Handling. This replaces the previous placeholder/incorrect logic in the Axios interceptor.
 Task 6: Finalize Auth Token Handling
+Objective: Update the Axios request interceptor in apiClient.ts to correctly retrieve the active Clerk JWT using the recommended client-side method (getToken) and attach it to the Authorization header for outgoing API requests made from the browser.
+File to Modify: src/services/apiClient.ts
+Step-by-Step Instructions:
+Import getToken:
+At the top of src/services/apiClient.ts, add the import for getToken from the appropriate Clerk package. Use @clerk/nextjs unless you are specifically using the beta App Router features that require /app-beta.
+// src/services/apiClient.ts
+import axios from 'axios';
+import { getToken } from '@clerk/nextjs'; // Or potentially '@clerk/nextjs/app-beta'
 
-Update apiClient.ts: Implement the correct Clerk token retrieval logic within the Axios interceptor for client-side requests. Use @clerk/nextjs's getToken function within an appropriate context or hook.
+// ... rest of the file ...
+Use code with caution.
+TypeScript
+Update the Axios Request Interceptor:
+Locate the apiClient.interceptors.request.use(async (config) => { ... }); block.
+Replace the existing token retrieval logic inside the interceptor with the following code, which uses getToken:
+// Inside apiClient.interceptors.request.use(async (config) => { ... }):
 
-// src/services/apiClient.ts - Interceptor Example (Conceptual)
-// This needs to be adapted based on where/how you manage Clerk state client-side
-// Option 1: Using Clerk's session directly (if available globally)
-// import { Clerk } from '@clerk/nextjs/dist/types/server'; // Adjust import
-// const clerk = new Clerk(/* ... */); // Needs initialization
-// const token = await clerk.session?.getToken();
-
-// Option 2: Using useAuth hook (requires context/wrapper)
-// Assume getToken is available via a hook or context
-// const token = await getClerkToken(); // Your helper function
-
-// Simplified placeholder - **REPLACE WITH ACTUAL CLERK LOGIC**
-apiClient.interceptors.request.use(async (config) => {
   let token: string | null = null;
+
+  // Ensure this runs only on the client-side where Clerk context is available
   if (typeof window !== 'undefined') {
-     // Use Clerk's client-side methods if available
-     // Example: Check if Clerk instance is loaded and get token
-     // This is highly dependent on your Clerk setup (e.g., using <ClerkProvider>)
-     // const session = window.Clerk?.session; // Hypothetical access
-     // token = await session?.getToken();
-     console.warn("Auth token retrieval in apiClient needs implementation for Clerk!");
+    try {
+      // Use Clerk's recommended client-side token retrieval function
+      token = await getToken();
+      // console.log("Clerk token fetched:", token ? "Yes" : "No"); // Optional: for debugging
+    } catch (error) {
+      console.error("Error fetching Clerk token:", error);
+      // Handle token fetching errors if necessary, though getToken usually handles internal states
+    }
   }
 
+  // Remove the old logic that checked localStorage for 'supabase.auth.token'
+  // const token = typeof window !== 'undefined' ? localStorage.getItem('supabase.auth.token') : null; // DELETE THIS LINE
+  // if (token) { // DELETE THIS BLOCK or modify the condition below
+  //   config.headers.Authorization = `Bearer ${JSON.parse(token).access_token}`;
+  // }
+
+  // Add the fetched Clerk token to the header if it exists
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   } else {
-    console.log("No auth token found for API request.");
+     // Optional: Decide if you want to remove any potentially stale Authorization header if no token is found
+     // delete config.headers.Authorization;
+     console.log("No Clerk token found, request sent without Authorization header.");
   }
-  return config;
-}, /* ... error handling ... */);
-IGNORE_WHEN_COPYING_START
-content_copy
-download
+
+  return config; // Return the modified config
+
+// ... rest of the interceptor (error handling) ...
 Use code with caution.
 TypeScript
-IGNORE_WHEN_COPYING_END
-
-Note: The backend API routes using auth() from Clerk handle auth server-side automatically for requests hitting those routes. This interceptor is mainly for client-side components making direct calls if that pattern is used, or for consistency.
+Verification:
+Ensure your application is wrapped in <ClerkProvider> in your root layout (src/app/layout.tsx).
+Log in to your application.
+Trigger an action in the UI that makes an API call requiring authentication (e.g., fetching workflows from /api/workflows).
+Open your browser's Developer Tools (Network tab). Inspect the outgoing request to your API. Verify that an Authorization header is present with a Bearer <JWT_TOKEN> value.
+Verify that your backend API route successfully authenticates the request using the Clerk auth() helper.
+This completes Task 6. The apiClient should now correctly attach the Clerk authentication token to client-side requests made to your backend API.
 
 Task 7: Code Cleanup
 
