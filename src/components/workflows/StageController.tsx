@@ -13,7 +13,7 @@ import { Ban, CircleCheck, CircleDashed, RefreshCcw, Save, Play, ThumbsUp, Thumb
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 // Corrected import path and name for execution hooks
 import { useStartExecution, useRecordManualValidation, useRetryStage, useGetExecutionLogs } from '@/hooks/useExecutions'; 
-import { useToast } from '@/components/ui/use-toast'; // Corrected useToast import path
+import { useToast } from '@/hooks/use-toast'; // Corrected useToast import path
 import { ExecutionLog, ExecutionSummary } from '@/services/apiClient'; // Import ExecutionLog and ExecutionSummary types
 
 // Map log status to badge variant (copied from GhostOverlay)
@@ -204,7 +204,7 @@ export const StageController: React.FC<StageControllerProps> = ({
   // Determine stage status based on the latest log
   const stageStatus = latestLogForStage?.status ?? 'PENDING'; // Default to PENDING if no log
   const canRetry = (stageStatus === 'FAILED' || stageStatus === 'ERROR') &&
-                   (latestLogForStage?.attemptNumber ?? 0) < (stage.retryLimit ?? 0);
+                   (latestLogForStage?.retryCount ?? 0) < (stage.retryLimit ?? 0); // Replaced attemptNumber with retryCount
   const needsManualValidation = stage.validationType === 'MANUAL' && stageStatus === 'AWAITING_VALIDATION';
 
   // Loading state for the stage data itself (now passed as prop, so no internal loading)
@@ -229,12 +229,14 @@ export const StageController: React.FC<StageControllerProps> = ({
         <CardTitle className="flex items-center justify-between">
           <span>{stage.name || 'Unnamed Stage'}</span>
           <div className="flex items-center space-x-2">
-            <ValidationStatusIndicator type={stage.validationType} criteria={stage.validationCriteria} />
+            {/* Cast validationCriteria to string */} 
+            <ValidationStatusIndicator type={stage.validationType} criteria={String(stage.validationCriteria ?? '')} /> 
             {/* Display current stage status */}
             <Badge variant={getStatusVariant(stageStatus)}>{stageStatus}</Badge>
           </div>
         </CardTitle>
-        <CardDescription>{stage.description || 'No description provided.'}</CardDescription>
+        {/* Removed stage.description access, kept fallback */}
+        <CardDescription>{'No description provided.'}</CardDescription>
       </CardHeader>
       <CardContent className="flex-grow flex flex-col space-y-4">
         <div className="space-y-2 flex-grow flex flex-col">
@@ -268,10 +270,11 @@ export const StageController: React.FC<StageControllerProps> = ({
                   <pre className="whitespace-pre-wrap font-mono text-[11px]">{latestLogForStage.errorDetails}</pre>
                 </div>
               )}
-              {(latestLogForStage.status === 'completed' || latestLogForStage.status === 'passed') && latestLogForStage.outputData && (
+              {(latestLogForStage.status === 'completed' || latestLogForStage.status === 'passed') && latestLogForStage.processedOutput && ( // Replaced outputData with processedOutput
                 <div>
                   <Label className="text-xs text-muted-foreground">Output:</Label>
-                  <pre className="text-xs whitespace-pre-wrap bg-background p-2 rounded border mt-1 font-mono text-[11px] max-h-40 overflow-auto">{JSON.stringify(latestLogForStage.outputData, null, 2)}</pre>
+                  {/* Replaced outputData with processedOutput */} 
+                  <pre className="text-xs whitespace-pre-wrap bg-background p-2 rounded border mt-1 font-mono text-[11px] max-h-40 overflow-auto">{JSON.stringify(latestLogForStage.processedOutput, null, 2)}</pre>
                 </div>
               )}
                {latestLogForStage.status === 'running' && (
@@ -280,8 +283,9 @@ export const StageController: React.FC<StageControllerProps> = ({
                {latestLogForStage.status === 'awaiting_validation' && (
                 <p className="text-sm text-yellow-600 flex items-center"><Info className="h-4 w-4 mr-2" />Awaiting Manual Validation</p>
               )}
-               {/* Add case for pending or other statuses if needed */}
-               {!latestLogForStage.errorDetails && !latestLogForStage.outputData && !['running', 'awaiting_validation', 'failed', 'completed', 'passed'].includes(latestLogForStage.status ?? '') && (
+               {/* Add case for pending or other statuses if needed */} 
+               {/* Replaced outputData with processedOutput */} 
+               {!latestLogForStage.errorDetails && !latestLogForStage.processedOutput && !['running', 'awaiting_validation', 'failed', 'completed', 'passed'].includes(latestLogForStage.status ?? '') && (
                   <p className="text-xs text-muted-foreground italic">No output or error recorded for this status.</p>
                )}
             </CardContent>
@@ -300,90 +304,89 @@ export const StageController: React.FC<StageControllerProps> = ({
             Save Prompt
           </Button>
 
-          {/* Start Execution Button (Only if no current execution) */}
-          {!currentExecutionId && (
-            <Button
-              onClick={handleStartExecution}
-              disabled={isStartingExecution}
-              size="sm"
-              variant="default" // Make it prominent
-            >
-              {isStartingExecution ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
-              Start Workflow
-            </Button>
-          )}
+          {/* Execution Controls - Conditionally Rendered */}
+          <CardContent className="pt-4">
+            <div className="flex flex-col space-y-4">
+              {/* Start Execution Button (Only if no current execution) */}
+              {!currentExecutionId && (
+                <Button
+                  onClick={handleStartExecution}
+                  disabled={isStartingExecution || !workflowId}
+                  className="w-full"
+                >
+                  {isStartingExecution ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />} Start Workflow Execution
+                </Button>
+              )}
 
-          {/* Manual Validation Buttons (if applicable) */}
-          {needsManualValidation && currentExecutionId && (
-            <>
-              <Button
-                onClick={() => handleManualValidation(true)} // Pass true for 'Pass'
-                disabled={isValidating}
-                size="sm"
-                variant="outline"
-                className="text-green-600 border-green-600 hover:bg-green-50"
-              >
-                {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsUp className="mr-2 h-4 w-4" />}
-                Pass
-              </Button>
-              <Button
-                onClick={() => handleManualValidation(false)} // Pass false for 'Fail'
-                disabled={isValidating}
-                size="sm"
-                variant="destructive"
-              >
-                {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsDown className="mr-2 h-4 w-4" />}
-                Fail
-              </Button>
-            </>
-          )}
+              {/* Manual Validation Buttons (If applicable and stage is awaiting validation) */}
+              {stage.validationType === 'MANUAL' && currentExecutionId && stageStatus === 'AWAITING_VALIDATION' && (
+                <div className="flex space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleManualValidation(true)}
+                    disabled={isValidating}
+                    className="flex-1 border-green-500 text-green-600 hover:bg-green-50"
+                  >
+                    {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsUp className="mr-2 h-4 w-4" />} Pass
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleManualValidation(false)}
+                    disabled={isValidating}
+                    className="flex-1 border-red-500 text-red-600 hover:bg-red-50"
+                  >
+                    {isValidating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ThumbsDown className="mr-2 h-4 w-4" />} Fail
+                  </Button>
+                </div>
+              )}
 
-          {/* Retry Button (if applicable) - Show if automated, execution exists, and status is failed/error and within retry limit */} 
-          {stage.stageType === 'AUTOMATED' && currentExecutionId && (stageStatus === 'FAILED' || stageStatus === 'ERROR') && canRetry && (
-            <Button
-              onClick={handleRetryStage}
-              disabled={isRetrying || isStartingExecution || isValidating} // Disable if other actions are pending
-              variant="secondary"
-              size="sm"
-              className="flex items-center"
-              title={`Retry this stage (Attempt ${latestLogForStage?.attemptNumber ?? 0} of ${stage.retryLimit ?? 0})`}
-            >
-              {isRetrying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RotateCcw className="h-4 w-4 mr-2" />}
-              Retry Stage ({latestLogForStage?.attemptNumber ?? 0}/{stage.retryLimit ?? 0})
-            </Button>
-          )}
-          {/* Consider adding a 'Run Stage' button if the stage hasn't run yet in the current execution? */}
+              {/* Retry Button (If applicable, stage failed/errored, and retries allowed) */}
+              {/* Replaced stage.stageType === 'AUTOMATED' with stage.validationType !== 'MANUAL' */}
+              {stage.validationType !== 'MANUAL' && currentExecutionId && (stageStatus === 'FAILED' || stageStatus === 'ERROR') && canRetry && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetryStage}
+                  disabled={isRetrying}
+                  className="w-full"
+                >
+                  {isRetrying ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RotateCcw className="mr-2 h-4 w-4" />} Retry Stage
+                </Button>
+              )}
 
-          {/* Trigger Snapshot Drawer Button */}
-          <Button onClick={onTriggerSnapshotDrawer} variant="outline" size="sm">
-            <Info className="mr-2 h-4 w-4" />
-            View Snapshots
-          </Button>
+              {/* Display Current Status */}
+              {currentExecutionId && stageStatus && (
+                <div className="flex items-center space-x-2 p-2 bg-muted rounded-md">
+                  <Badge variant={getStatusVariant(stageStatus)} className="capitalize">
+                    {stageStatus.replace('_', ' ')}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {/* Replaced executedAt with completedAt/startedAt */}
+                    {latestLogForStage?.endedAt || latestLogForStage?.startedAt ? `Last activity: ${new Date(latestLogForStage.endedAt ?? latestLogForStage.startedAt!).toLocaleString()}` : 'No activity yet.'}
+                  </span>
+                </div>
+              )}
 
+              {/* Display Error Message if Failed/Errored */}
+              {/* Replaced errorMessage with errorDetails */}
+              {currentExecutionId && (stageStatus === 'FAILED' || stageStatus === 'ERROR') && latestLogForStage?.errorDetails && (
+                <div className="flex items-start space-x-2 p-2 bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs">Error: {latestLogForStage.errorDetails}</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+          {/* Removed duplicate CardContent closing tag and added missing div closing tag */}
         </div>
+
+        {/* Removed stray closing brace */}
       </CardContent>
     </Card>
   );
 };
 
-// Helper function (can be moved to utils)
-// Removed duplicate function definition
-// const getStatusVariant = (status: string | null | undefined): "default" | "secondary" | "destructive" | "outline" | "warning" => {
-//   switch (status?.toUpperCase()) {
-//     case 'COMPLETED':
-//     case 'PASSED':
-//       return 'default'; // Success (often green)
-//     case 'FAILED':
-//     case 'ERROR':
-//       return 'destructive'; // Error (red)
-//     case 'RUNNING':
-//       return 'warning'; // In progress (often yellow/blue)
-//     case 'PENDING':
-//     case 'AWAITING_VALIDATION':
-//       return 'secondary'; // Neutral/Waiting (gray)
-//     case 'SKIPPED':
-//       return 'outline'; // Skipped (outline)
-//     default:
-//       return 'secondary';
-//   }
-// }
+// Removed duplicate helper function
+// Removed extra closing braces at the end of the file

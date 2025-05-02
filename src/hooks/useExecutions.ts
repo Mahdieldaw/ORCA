@@ -2,14 +2,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Added useMutation, useQueryClient
 import {
   fetchExecutions,
-  fetchExecutionDetail,
+  fetchExecutions,
+  fetchExecutionDetail, // Added fetchExecutionDetail
   fetchExecutionLogs,
   recordManualValidation,
   retryStage,
   updateExecutionStatus,
   startWorkflowExecution, // Added startWorkflowExecution
   ExecutionSummary,
-  ExecutionDetail,
+  ExecutionDetail, // Added ExecutionDetail type
   ExecutionLog,
 } from '@/services/apiClient';
 

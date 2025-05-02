@@ -95,6 +95,20 @@ export interface ExecutionSummary {
     currentStageOrder?: number | null;
 }
 
+export interface ExecutionDetail {
+    id: string;
+    workflowId: string;
+    userId: string;
+    status: string; // e.g., 'pending', 'running', 'completed', 'failed', 'paused'
+    inputs: any; // Initial inputs provided
+    outputs: any | null; // Final outputs if workflow completed successfully
+    startedAt: string;
+    endedAt: string | null;
+    currentStageId: string | null; // ID of the stage currently being processed or last processed
+    // Potentially include summary of stage executions or link to logs
+    stageExecutions?: ExecutionLog[]; // Optional: Embed logs/stage summaries
+}
+
 export interface ExecutionLog {
     id: string;
     executionId: string;
@@ -138,6 +152,14 @@ export const fetchWorkflows = async (): Promise<WorkflowSummary[]> => {
   console.log('Fetching workflows from:', apiClient.defaults.baseURL + '/workflows');
   const response = await apiClient.get('/workflows');
   return response.data;
+};
+
+// Fetch detailed information for a single execution
+export const fetchExecutionDetail = async (executionId: string): Promise<ExecutionDetail> => {
+    console.log(`Fetching execution detail for ${executionId}`);
+    // Assuming endpoint like /executions/{executionId}
+    const response = await apiClient.get(`/executions/${executionId}`);
+    return response.data;
 };
 
 // Fetch detailed information for a single workflow
