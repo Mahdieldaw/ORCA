@@ -2,7 +2,8 @@
 'use client';
 
 import React, { useState } from 'react'; // Added useState
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose, Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/drawer'; // Combined imports
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from '@/components/ui/drawer'; // Combined imports
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -10,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal, History, Trash2, Loader2, AlertTriangle, RotateCcw } from 'lucide-react'; // Combined imports, Added RotateCcw
 import { useGetSnapshots, useRestoreSnapshot, useDeleteSnapshot, useCreateSnapshot } from '@/hooks/useSnapshots'; // Corrected import path for hooks
-import { useToast } from '@/components/hooks/use-toast'; // Corrected import path for useToast
+import { useToast } from '@/hooks/use-toast'; // Corrected import path for useToast
 import { Input } from '@/components/ui/input'; // Added for snapshot name
 import { SnapshotSummary } from '@/services/apiClient'; // Import type
 import {
@@ -88,27 +89,7 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
 
     console.log(`Deleting snapshot ${snapshotToDelete.id}`);
     // Assuming deleteSnapshot hook now only needs snapshotId
-    deleteSnapshot(snapshotToDelete.id, {
-        onSuccess: () => {
-          toast({
-            title: 'Snapshot Deleted',
-            description: `Snapshot '${snapshotToDelete.name}' has been deleted.`,
-          });
-          setIsDeleteDialogOpen(false);
-          setSnapshotToDelete(null);
-          // Query invalidation should happen within the hook
-        },
-        onError: (deleteError) => {
-          toast({
-            title: 'Delete Failed',
-            description: `Could not delete snapshot: ${(deleteError as Error).message}`,
-            variant: 'destructive',
-          });
-          setIsDeleteDialogOpen(false);
-          setSnapshotToDelete(null);
-        },
-      }
-    );
+    deleteSnapshot(snapshotToDelete.id); // Callbacks are handled by the useDeleteSnapshot hook
   };
 
   // Handle opening the restore confirmation modal
@@ -120,28 +101,7 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
   // Handle confirming the restore action (called by the modal)
   const handleConfirmRestore = (snapshotId: string) => {
     console.log(`Restoring snapshot ${snapshotId}`);
-    restoreSnapshot(snapshotId, {
-      onSuccess: (restoredItem) => { // restoredItem can be WorkflowDetail or ExecutionSummary
-        toast({
-          title: "Snapshot Restored",
-          description: `Workflow state restored from snapshot. ${'name' in restoredItem ? `New execution: ${restoredItem.name}` : ''}`,
-        });
-        setIsRestoreModalOpen(false); // Close this modal
-        setSnapshotToRestore(null);
-        onOpenChange(false); // Close the drawer after successful restore
-        // Further actions like navigation might be needed depending on the return type
-      },
-      onError: (restoreError) => {
-        toast({
-          title: "Restore Failed",
-          description: `Could not restore snapshot: ${(restoreError as Error).message}`,
-          variant: "destructive",
-        });
-        // Keep modal open on error?
-        // setIsRestoreModalOpen(false);
-        // setSnapshotToRestore(null);
-      },
-    });
+    restoreSnapshot(snapshotId); // Callbacks are handled by the useRestoreSnapshot hook
   };
 
   // Handle saving a new snapshot
@@ -162,24 +122,28 @@ export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, on
       comment: 'State saved from drawer (placeholder)',
     };
 
-    createSnapshotMutation.mutate(
-      {
-        workflowId: workflowId, // Use workflowId
-        // executionId: currentExecutionId, // Need context if saving execution state
-        // stageId: currentStageId, // Need context if saving stage state
-        name: newSnapshotName.trim(),
-        stateData: placeholderStateData, // Replace with actual state data
-      },
-      {
-        onSuccess: () => {
-          toast({ title: "Snapshot Saved", description: `Snapshot '${newSnapshotName.trim()}' saved.` });
-          setNewSnapshotName(''); // Clear input
-        },
-        onError: (error) => {
-          toast({ title: "Save Failed", description: (error as Error)?.message || 'Could not save snapshot.', variant: "destructive" });
-        },
-      }
-    );
+    // TODO: Need to pass executionId and stageId to createSnapshotMutation.mutate
+    // The current context (workflowId) doesn't match the required parameters.
+    // createSnapshotMutation.mutate(
+    //   {
+    //     // workflowId: workflowId, // Incorrect parameter
+    //     executionId: "PLACEHOLDER_EXECUTION_ID", // Need actual executionId from context
+    //     stageId: "PLACEHOLDER_STAGE_ID", // Need actual stageId from context
+    //     name: newSnapshotName.trim(),
+    //     stateData: placeholderStateData, // Replace with actual state data
+    //   },
+    //   {
+    //     onSuccess: () => {
+    //       toast({ title: "Snapshot Saved", description: `Snapshot '${newSnapshotName.trim()}' saved.` });
+    //       setNewSnapshotName(''); // Clear input
+    //     },
+    //     onError: (error) => {
+    //       toast({ title: "Save Failed", description: (error as Error)?.message || 'Could not save snapshot.', variant: "destructive" });
+    //     },
+    //   }
+    // );
+    console.warn("Snapshot creation disabled: Missing executionId and stageId context.");
+    toast({ title: "Save Disabled", description: "Cannot save snapshot without execution/stage context.", variant: "warning" });
   };
 
   return (

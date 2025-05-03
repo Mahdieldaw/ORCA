@@ -12,7 +12,7 @@ interface RouteParams {
 // GET /api/workflows/{workflowId} - Fetch a specific workflow
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     const { workflowId } = params;
 
     if (!userId) {
@@ -42,7 +42,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 // PUT /api/workflows/{workflowId} - Update a specific workflow
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     const { workflowId } = params;
 
     if (!userId) {
@@ -50,12 +50,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     const body = await request.json();
+    // Only allow updating specific fields
     const { name, description, metadata } = body;
-
-    // Basic validation (more robust validation might be needed)
-    if (!name && !description && !metadata) {
-      return NextResponse.json({ error: 'No update data provided' }, { status: 400 });
-    }
 
     // Check if workflow exists and belongs to the user before updating
     const existingWorkflow = await prisma.workflow.findUnique({
@@ -67,10 +63,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     const updatedWorkflow = await prisma.workflow.update({
-      where: {
-        id: workflowId,
-        // No need to check userId again here as findUnique already did
-      },
+      where: { id: workflowId },
       data: {
         name: name !== undefined ? name : existingWorkflow.name,
         description: description !== undefined ? description : existingWorkflow.description,
@@ -88,7 +81,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 // DELETE /api/workflows/{workflowId} - Delete a specific workflow
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     const { workflowId } = params;
 
     if (!userId) {
