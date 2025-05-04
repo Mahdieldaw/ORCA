@@ -3,17 +3,18 @@ import { PrismaClient } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
-const prisma = new PrismaClient();
-
-interface RouteParams {
+// Define the expected type for the dynamic segment
+interface SnapshotRouteContext {
   params: { snapshotId: string };
 }
 
+const prisma = new PrismaClient();
+
 // GET /api/snapshots/{snapshotId} - Fetch a specific snapshot (including data)
-export async function GET(request: Request, { params }: { params: { snapshotId: string } }) {
+export async function GET(request: Request, context: SnapshotRouteContext) {
   try {
     const { userId } = await auth();
-    const { snapshotId } = params;
+    const { snapshotId } = context.params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -33,16 +34,16 @@ export async function GET(request: Request, { params }: { params: { snapshotId: 
 
     return NextResponse.json(snapshot);
   } catch (error) {
-    console.error(`Error fetching snapshot ${params.snapshotId}:`, error);
+    console.error(`Error fetching snapshot ${context.params.snapshotId}:`, error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
 // DELETE /api/snapshots/{snapshotId} - Delete a specific snapshot
-export async function DELETE(request: Request, { params }: { params: { snapshotId: string } }) {
+export async function DELETE(request: Request, context: SnapshotRouteContext) {
   try {
     const { userId } = await auth();
-    const { snapshotId } = params;
+    const { snapshotId } = context.params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -62,7 +63,7 @@ export async function DELETE(request: Request, { params }: { params: { snapshotI
 
     return NextResponse.json({ message: 'Snapshot deleted successfully' }, { status: 200 });
   } catch (error) {
-    console.error(`Error deleting snapshot ${params.snapshotId}:`, error);
+    console.error(`Error deleting snapshot ${context.params.snapshotId}:`, error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

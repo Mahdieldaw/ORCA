@@ -101,3 +101,6 @@ Documents/
 
 # Optional: exclude GitIngest cache/temp if applicable
 .git-ingest-cache/
+
+# clerk configuration (can include secrets)
+/.clerk/

@@ -1,4 +1,3 @@
-// src/app/explorer/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -12,40 +11,20 @@ import { StagePreviewOverlay } from '@/components/workflows/StagePreviewOverlay'
 import { StartExecutionModal } from '@/components/workflows/StartExecutionModal';
 import { HybridThinkDrawer } from '@/components/workflows/HybridThinkDrawer';
 import { toast } from '@/hooks/use-toast';
+import GlobalLayout from '@/components/layout/GlobalLayout';
 
 export default function ExplorerPage() {
-  // Zustand store for global workflow state
   const activeWorkflowId = useWorkflowStore((state) => state.activeWorkflowId);
   const setActiveWorkflowId = useWorkflowStore((state) => state.setActiveWorkflowId);
   const currentExecutionId = useWorkflowStore((state) => state.currentExecutionId);
   const setCurrentExecutionId = useWorkflowStore((state) => state.setCurrentExecutionId);
   const setActiveStageOrder = useWorkflowStore((state) => state.setActiveStageOrder);
 
-  // Fetch all workflows
   const { data: workflows, isLoading: isLoadingWorkflows, error: workflowsError } = useGetWorkflows();
+  const { data: workflowDetail, isLoading: isLoadingWorkflowDetail, error: workflowDetailError } = useGetWorkflowDetail(activeWorkflowId || undefined);
+  const { data: executions = [], isLoading: isLoadingExecutions, error: executionsError } = useGetExecutions(activeWorkflowId ? { workflowId: activeWorkflowId } : undefined);
+  const { data: executionLogs = [], isLoading: isLoadingLogs, error: logsError } = useGetExecutionLogs(currentExecutionId);
 
-  // Fetch details for the selected workflow
-  const {
-    data: workflowDetail,
-    isLoading: isLoadingWorkflowDetail,
-    error: workflowDetailError,
-  } = useGetWorkflowDetail(activeWorkflowId || undefined);
-
-  // Fetch executions for the selected workflow
-  const {
-    data: executions = [],
-    isLoading: isLoadingExecutions,
-    error: executionsError,
-  } = useGetExecutions(activeWorkflowId ? { workflowId: activeWorkflowId } : undefined);
-
-  // Fetch execution logs for the current execution
-  const {
-    data: executionLogs = [],
-    isLoading: isLoadingLogs,
-    error: logsError,
-  } = useGetExecutionLogs(currentExecutionId);
-
-  // State for preview overlay
   const [hoveredStageOrder, setHoveredStageOrder] = useState<number | null>(null);
   const [previewPosition, setPreviewPosition] = useState<{ x: number; y: number; side: 'left' | 'right' }>({ x: 0, y: 0, side: 'right' });
 
@@ -81,7 +60,6 @@ export default function ExplorerPage() {
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
   const { mutate: startExecution, isPending: isStartingExecution } = useStartExecution();
 
-  // Show error toasts if needed
   useEffect(() => {
     if (workflowsError) toast({ title: 'Error', description: 'Failed to load workflows.' });
     if (workflowDetailError) toast({ title: 'Error', description: 'Failed to load workflow details.' });
@@ -90,106 +68,115 @@ export default function ExplorerPage() {
   }, [workflowsError, workflowDetailError, executionsError, logsError]);
 
   return (
-    <div className="flex min-h-screen bg-background">
-      {/* Workflow List Sidebar */}
-      <aside className="w-[260px] border-r bg-card p-4 flex flex-col">
-        <h2 className="text-lg font-semibold mb-4">Workflows</h2>
-        {isLoadingWorkflows ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-10 w-full rounded" />
-            ))}
-          </div>
-        ) : workflows && workflows.length > 0 ? (
-          <div className="space-y-2">
-            {workflows.map((wf) => (
-              <Card
-                key={wf.id}
-                className={`cursor-pointer transition-colors ${activeWorkflowId === wf.id ? 'border-primary bg-secondary/30' : 'hover:border-muted-foreground/40'}`}
-                onClick={() => setActiveWorkflowId(wf.id)}
-                tabIndex={0}
-                aria-pressed={activeWorkflowId === wf.id}
-              >
-                <CardHeader className="p-3 pb-1">
-                  <CardTitle className="text-base font-medium truncate">{wf.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 pt-0 text-xs text-muted-foreground line-clamp-2">
-                  {wf.description || 'No description'}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="text-muted-foreground text-sm">No workflows found.</div>
-        )}
-      </aside>
+    <GlobalLayout>
+      <div className="flex min-h-screen bg-background">
+        <aside className="w-[260px] border-r bg-card p-4 flex flex-col">
+          <h2 className="text-lg font-semibold mb-4">Workflows</h2>
+          {isLoadingWorkflows ? (
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-10 w-full rounded" />
+              ))}
+            </div>
+          ) : workflows && workflows.length > 0 ? (
+            <div className="space-y-2">
+              {workflows.map((wf) => (
+                <Card
+                  key={wf.id}
+                  className={`cursor-pointer transition-colors ${activeWorkflowId === wf.id ? 'border-primary bg-secondary/30' : 'hover:border-muted-foreground/40'}`}
+                  onClick={() => setActiveWorkflowId(wf.id)}
+                  tabIndex={0}
+                  aria-pressed={activeWorkflowId === wf.id}
+                >
+                  <CardHeader className="p-3 pb-1">
+                    <CardTitle className="text-base font-medium truncate">{wf.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3 pt-0 text-xs text-muted-foreground line-clamp-2">
+                    {wf.description || 'No description'}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-muted-foreground text-sm">No workflows found.</div>
+          )}
+        </aside>
 
-      {/* Main Content: Stage Rail and Detail */}
-      <main className="flex-1 p-6 relative">
-        {isLoadingWorkflowDetail ? (
-          <Skeleton className="h-10 w-1/2 mb-4" />
-        ) : workflowDetail ? (
-          <WorkflowStageRail
-            stages={workflowDetail.stages}
-            logs={executionLogs ?? []}
-            workflowName={workflowDetail.name}
-            onShowPreview={handleStageMouseEnter}
-            onHidePreview={handleStageMouseLeave}
-            onTriggerSnapshotDrawer={handleTriggerSnapshotDrawer}
-          />
-        ) : activeWorkflowId ? (
-          <div className="text-muted-foreground text-center mt-20">Workflow not found or failed to load.</div>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <h3 className="text-xl font-semibold mb-2">Select a workflow to get started</h3>
-            <p className="text-center max-w-md">Choose a workflow from the left panel to view its stages, run executions, and manage snapshots.</p>
-          </div>
-        )}
-        {/* Preview Overlay rendered at the page level for correct positioning */}
-        {workflowDetail && hoveredStageOrder !== null && (
-          (() => {
-            const hoveredStage = workflowDetail.stages.find(
-              (stage) => stage.stageOrder === hoveredStageOrder
-            );
-            return hoveredStage ? (
-              <StagePreviewOverlay
-                stage={hoveredStage}
-                position={previewPosition}
+        <main className="flex-1 p-6 relative">
+          <h2 className="text-2xl font-semibold mb-4">Workflow Details</h2>
+          {activeWorkflowId ? (
+            isLoadingWorkflowDetail || isLoadingExecutions || isLoadingLogs ? (
+              <div className="space-y-4">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-64 w-full" />
+              </div>
+            ) : workflowDetail ? (
+              <WorkflowStageRail
+                stages={workflowDetail.stages}
+                logs={executionLogs ?? []}
+                workflowName={workflowDetail.name}
+                onShowPreview={handleStageMouseEnter}
+                onHidePreview={handleStageMouseLeave}
+                onTriggerSnapshotDrawer={handleTriggerSnapshotDrawer}
               />
-            ) : null;
-          })()
-        )}
-        {/* Start Execution Modal */}
-        <StartExecutionModal
-          isOpen={isStartModalOpen}
-          onOpenChange={setIsStartModalOpen}
-          workflowId={activeWorkflowId || ''}
-          workflowName={workflowDetail?.name || 'Workflow'}
-          onSubmit={(inputs) => {
-            if (!activeWorkflowId) return;
-            startExecution(
-              { workflowId: activeWorkflowId, inputs },
-              {
-                onSuccess: (execution) => {
-                  toast({ title: 'Execution Started', description: `Execution ${execution.id} initiated.` });
-                  setCurrentExecutionId(execution.id);
-                  setActiveStageOrder(1); // Optionally reset to first stage
-                  setIsStartModalOpen(false);
-                },
-                onError: (startError) => {
-                  toast({ title: 'Execution Failed', description: `Could not start: ${(startError instanceof Error ? startError.message : String(startError))}`, variant: 'destructive' });
-                },
-              }
-            );
-          }}
-          isStartingExecution={isStartingExecution}
-        />
-        <HybridThinkDrawer
-          isOpen={isSnapshotDrawerOpen}
-          onOpenChange={setIsSnapshotDrawerOpen}
-          workflowId={activeWorkflowId}
-        />
-      </main>
-    </div>
+            ) : (
+              <div className="text-muted-foreground text-center mt-20 border rounded-lg bg-card p-10">
+                Workflow <span className="font-mono">{activeWorkflowId.substring(0, 8)}...</span> not found or failed to load.
+              </div>
+            )
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground border rounded-lg bg-card p-10">
+              <h3 className="text-xl font-semibold mb-2">Select a workflow to get started</h3>
+              <p className="text-center max-w-md">
+                Choose a workflow from the left panel to view its stages, run executions, and manage snapshots.
+              </p>
+            </div>
+          )}
+
+          {workflowDetail && hoveredStageOrder !== null && (
+            (() => {
+              const hoveredStage = workflowDetail.stages.find((stage) => stage.stageOrder === hoveredStageOrder);
+              return hoveredStage ? <StagePreviewOverlay stage={hoveredStage} position={previewPosition} /> : null;
+            })()
+          )}
+
+          <StartExecutionModal
+            isOpen={isStartModalOpen}
+            onOpenChange={setIsStartModalOpen}
+            workflowId={activeWorkflowId || ''}
+            workflowName={workflowDetail?.name || 'Workflow'}
+            onSubmit={(inputs) => {
+              if (!activeWorkflowId) return;
+              startExecution(
+                { workflowId: activeWorkflowId, inputs },
+                {
+                  onSuccess: (execution) => {
+                    toast({ title: 'Execution Started', description: `Execution ${execution.id} initiated.` });
+                    setCurrentExecutionId(execution.id);
+                    setActiveStageOrder(1);
+                    setIsStartModalOpen(false);
+                  },
+                  onError: (startError) => {
+                    toast({
+                      title: 'Execution Failed',
+                      description: `Could not start: ${
+                        startError instanceof Error ? startError.message : String(startError)
+                      }`,
+                      variant: 'destructive',
+                    });
+                  },
+                }
+              );
+            }}
+            isStartingExecution={isStartingExecution}
+          />
+          <HybridThinkDrawer
+            isOpen={isSnapshotDrawerOpen}
+            onOpenChange={setIsSnapshotDrawerOpen}
+            workflowId={activeWorkflowId}
+          />
+        </main>
+      </div>
+    </GlobalLayout>
   );
 }

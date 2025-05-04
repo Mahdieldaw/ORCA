@@ -3,17 +3,18 @@ import { PrismaClient } from '@prisma/client';
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 
-const prisma = new PrismaClient();
-
-interface RouteParams {
+// Define the expected type for the dynamic segment
+interface ExecutionRouteContext {
   params: { executionId: string };
 }
 
+const prisma = new PrismaClient();
+
 // GET /api/executions/{executionId} - Fetch a specific execution
-export async function GET(request: Request, { params }: { params: { executionId: string } }) {
+export async function GET(request: Request, context: ExecutionRouteContext) {
   try {
     const { userId } = await auth();
-    const { executionId } = params;
+    const { executionId } = context.params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -40,16 +41,16 @@ export async function GET(request: Request, { params }: { params: { executionId:
 
     return NextResponse.json(execution);
   } catch (error) {
-    console.error(`Error fetching execution ${params.executionId}:`, error);
+    console.error(`Error fetching execution ${context.params.executionId}:`, error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
 // PUT /api/executions/{executionId} - Update an execution (e.g., change status)
-export async function PUT(request: Request, { params }: { params: { executionId: string } }) {
+export async function PUT(request: Request, context: ExecutionRouteContext) {
   try {
     const { userId } = await auth();
-    const { executionId } = params;
+    const { executionId } = context.params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -94,16 +95,16 @@ export async function PUT(request: Request, { params }: { params: { executionId:
 
     return NextResponse.json(updatedExecution);
   } catch (error) {
-    console.error(`Error updating execution ${params.executionId}:`, error);
+    console.error(`Error updating execution ${context.params.executionId}:`, error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
 // DELETE /api/executions/{executionId} - Delete a specific execution
-export async function DELETE(request: Request, { params }: { params: { executionId: string } }) {
+export async function DELETE(request: Request, context: ExecutionRouteContext) {
   try {
     const { userId } = await auth();
-    const { executionId } = params;
+    const { executionId } = context.params;
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -123,7 +124,7 @@ export async function DELETE(request: Request, { params }: { params: { execution
 
     return NextResponse.json({ message: 'Execution deleted successfully' }, { status: 200 });
   } catch (error) {
-    console.error(`Error deleting execution ${params.executionId}:`, error);
+    console.error(`Error deleting execution ${context.params.executionId}:`, error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
