@@ -1,281 +1,190 @@
 // src/components/workflows/HybridThinkDrawer.tsx
 'use client';
 
-import React, { useState } from 'react'; // Added useState
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerFooter, DrawerClose } from '@/components/ui/drawer'; // Combined imports
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
+import { useState, useEffect } from 'react';
+// Update the import path below if your Sheet components are located elsewhere
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../ui/sheet';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Terminal, History, Trash2, Loader2, AlertTriangle, RotateCcw } from 'lucide-react'; // Combined imports, Added RotateCcw
-import { useGetSnapshots, useRestoreSnapshot, useDeleteSnapshot, useCreateSnapshot } from '@/hooks/useSnapshots'; // Corrected import path for hooks
-import { useToast } from '@/hooks/use-toast'; // Corrected import path for useToast
-import { Input } from '@/components/ui/input'; // Added for snapshot name
-import { SnapshotSummary } from '@/services/apiClient'; // Import type
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'; // Import AlertDialog
-import { SnapshotRestoreModal } from './SnapshotRestoreModal'; // Import the modal
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
+import { useGetSnapshots, useCreateSnapshot, useRestoreSnapshot, useDeleteSnapshot } from '@/hooks/useSnapshots';
+import { format } from 'date-fns';
+import { SnapshotRestoreModal } from './SnapshotRestoreModal';
+import { SnapshotSummary } from '@/services/apiClient';
 
 interface HybridThinkDrawerProps {
   isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  // Removed executionId and stageId as they are less relevant for listing/restoring snapshots
-  // We might need workflowId if snapshots are filtered by workflow
-  workflowId: string | null; 
+  onOpenChange: (open: boolean) => void;
+  workflowId: string | null;
 }
 
-// Simple component to render a snapshot entry - Consider integrating actions directly below
-const SnapshotEntry: React.FC<{ snapshot: SnapshotSummary }> = ({ snapshot }) => {
-  // This component might become redundant if actions are handled in the main map
-  return (
-    <div
-      className="flex justify-between items-center p-2 border rounded-md"
-      role="listitem"
-      aria-label={`Snapshot: ${snapshot.name}`}
-    >
-      <div>
-        <p className="text-sm font-medium">{snapshot.name}</p>
-        <p className="text-xs text-muted-foreground">Saved: {new Date(snapshot.createdAt).toLocaleString()}</p>
-      </div>
-      {/* Actions will be rendered in the main component's map */}
-    </div>
-  );
-};
-
-
-export const HybridThinkDrawer: React.FC<HybridThinkDrawerProps> = ({ isOpen, onOpenChange, workflowId }) => {
-  // Fetch snapshots using the hook, conditionally enabled
-  // Filter by workflowId if available
-  const { data: snapshots, isLoading: isLoadingSnapshots, error: snapshotsError } = useGetSnapshots({
-    workflowId: workflowId ?? undefined,
-  }, {
-    enabled: isOpen && !!workflowId, // Only fetch when the drawer is open and workflowId is present
-  });
-
-  const { mutate: restoreSnapshot, isPending: isRestoring } = useRestoreSnapshot(); // Restore hook
-  const { mutate: deleteSnapshot, isPending: isDeleting } = useDeleteSnapshot(); // Delete hook
-  const createSnapshotMutation = useCreateSnapshot(); // Create hook
-  const { toast } = useToast(); // Toast hook
-
-  // State for delete confirmation
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [snapshotToDelete, setSnapshotToDelete] = useState<SnapshotSummary | null>(null);
-  
-  // State for restore confirmation modal
+export const HybridThinkDrawer = ({ isOpen, onOpenChange, workflowId }: HybridThinkDrawerProps) => {
+  const { toast } = useToast();
+  const [snapshotName, setSnapshotName] = useState('');
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
-  const [snapshotToRestore, setSnapshotToRestore] = useState<SnapshotSummary | null>(null);
+  const [snapshotToRestoreObj, setSnapshotToRestoreObj] = useState<SnapshotSummary | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [snapshotToDelete, setSnapshotToDelete] = useState<string | null>(null);
 
-  const [newSnapshotName, setNewSnapshotName] = React.useState('');
+  // Fetch snapshots for the workflow
+  const { data: snapshots = [], isLoading, error, refetch } = useGetSnapshots({ workflowId: workflowId ?? undefined });
 
-  // Handle opening delete confirmation
-  const handleDeleteClick = (snapshot: SnapshotSummary) => {
-    setSnapshotToDelete(snapshot);
-    setIsDeleteDialogOpen(true);
+  // Create snapshot
+  const { mutate: createSnapshot, isPending: isCreating } = useCreateSnapshot();
+  const handleSaveSnapshot = () => {
+    if (!workflowId || !snapshotName.trim()) return;
+    createSnapshot(
+      { executionId: workflowId, name: snapshotName.trim() },
+      {
+        onSuccess: () => {
+          toast({ title: 'Snapshot saved', description: 'Workflow snapshot created.' });
+          setSnapshotName('');
+          refetch();
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to save snapshot.', variant: 'destructive' }),
+      }
+    );
   };
 
-  // Handle confirming deletion
+  // Restore snapshot
+  const { mutate: restoreSnapshot, isPending: isRestoring } = useRestoreSnapshot();
+  const handleConfirmRestore = () => {
+    if (!snapshotToRestoreObj) return;
+    restoreSnapshot(
+      snapshotToRestoreObj.id,
+      {
+        onSuccess: () => {
+          toast({ title: 'Snapshot restored', description: 'Workflow restored from snapshot.' });
+          setIsRestoreModalOpen(false);
+          setSnapshotToRestoreObj(null);
+          onOpenChange(false);
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to restore snapshot.', variant: 'destructive' }),
+      }
+    );
+  };
+
+  // Delete snapshot
+  const { mutate: deleteSnapshot, isPending: isDeleting } = useDeleteSnapshot();
   const handleConfirmDelete = () => {
     if (!snapshotToDelete) return;
-
-    console.log(`Deleting snapshot ${snapshotToDelete.id}`);
-    // Assuming deleteSnapshot hook now only needs snapshotId
-    deleteSnapshot(snapshotToDelete.id); // Callbacks are handled by the useDeleteSnapshot hook
+    deleteSnapshot(
+      snapshotToDelete,
+      {
+        onSuccess: () => {
+          toast({ title: 'Snapshot deleted', description: 'Snapshot removed.' });
+          setIsDeleteDialogOpen(false);
+          setSnapshotToDelete(null);
+          refetch();
+        },
+        onError: () => toast({ title: 'Error', description: 'Failed to delete snapshot.', variant: 'destructive' }),
+      }
+    );
   };
 
-  // Handle opening the restore confirmation modal
-  const handleRestoreClick = (snapshot: SnapshotSummary) => {
-    setSnapshotToRestore(snapshot);
-    setIsRestoreModalOpen(true);
-  };
-
-  // Handle confirming the restore action (called by the modal)
-  const handleConfirmRestore = (snapshotId: string) => {
-    console.log(`Restoring snapshot ${snapshotId}`);
-    restoreSnapshot(snapshotId); // Callbacks are handled by the useRestoreSnapshot hook
-  };
-
-  // Handle saving a new snapshot
-  const handleSaveNewSnapshot = () => {
-    // Saving snapshot might need more context (current execution/stage) - Revisit this logic
-    // For now, let's assume it needs workflowId and maybe some placeholder state
-    if (!workflowId || !newSnapshotName.trim()) {
-      toast({ title: "Missing Information", description: "Workflow context and snapshot name are required.", variant: "warning" });
-      return;
+  useEffect(() => {
+    if (!isOpen) {
+      setSnapshotName('');
+      setSnapshotToRestoreObj(null);
+      setIsRestoreModalOpen(false);
+      setSnapshotToDelete(null);
+      setIsDeleteDialogOpen(false);
     }
-    console.log(`Attempting to save snapshot: ${newSnapshotName} for workflow ${workflowId}`);
-
-    // TODO: Define the actual 'stateData' to be saved.
-    // This likely needs to come from the currently active stage/editor state, not the drawer itself.
-    const placeholderStateData = {
-      // prompt: (document.getElementById(`prompt-${stageId}`) as HTMLTextAreaElement)?.value || '', // Example - Needs context
-      timestamp: new Date().toISOString(),
-      comment: 'State saved from drawer (placeholder)',
-    };
-
-    // TODO: Need to pass executionId and stageId to createSnapshotMutation.mutate
-    // The current context (workflowId) doesn't match the required parameters.
-    // createSnapshotMutation.mutate(
-    //   {
-    //     // workflowId: workflowId, // Incorrect parameter
-    //     executionId: "PLACEHOLDER_EXECUTION_ID", // Need actual executionId from context
-    //     stageId: "PLACEHOLDER_STAGE_ID", // Need actual stageId from context
-    //     name: newSnapshotName.trim(),
-    //     stateData: placeholderStateData, // Replace with actual state data
-    //   },
-    //   {
-    //     onSuccess: () => {
-    //       toast({ title: "Snapshot Saved", description: `Snapshot '${newSnapshotName.trim()}' saved.` });
-    //       setNewSnapshotName(''); // Clear input
-    //     },
-    //     onError: (error) => {
-    //       toast({ title: "Save Failed", description: (error as Error)?.message || 'Could not save snapshot.', variant: "destructive" });
-    //     },
-    //   }
-    // );
-    console.warn("Snapshot creation disabled: Missing executionId and stageId context.");
-    toast({ title: "Save Disabled", description: "Cannot save snapshot without execution/stage context.", variant: "warning" });
-  };
+  }, [isOpen]);
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent className="w-[400px] sm:w-[540px]"> {/* Example widths */}
+      <SheetContent side="right" className="w-[420px] max-w-full">
         <SheetHeader>
-          <SheetTitle>Workflow Snapshots</SheetTitle> {/* Updated Title */}
+          <SheetTitle>Workflow Snapshots</SheetTitle>
           <SheetDescription>
-            Save or restore workflow states.
+            Save, restore, or delete snapshots of your workflow for versioning and recovery.
           </SheetDescription>
         </SheetHeader>
-
-        <div className="py-4 space-y-6"> {/* Increased spacing */}
-          {/* Section for Saving Snapshots - Only show if context is available */} 
-          {workflowId && ( // Only show save if we have a workflow context
-          <div>
-             <h3 className="text-sm font-semibold mb-2">Save Current Workflow State</h3>
-             <div className="flex space-x-2">
-                <Input
-                    type="text"
-                    placeholder="Snapshot Name (e.g., 'Initial Setup')"
-                    value={newSnapshotName}
-                    onChange={(e) => setNewSnapshotName(e.target.value)}
-                    className="flex-grow"
-                    disabled={createSnapshotMutation.isPending}
-                />
-                <Button
-                    onClick={handleSaveNewSnapshot}
-                    disabled={!newSnapshotName.trim() || createSnapshotMutation.isPending}
-                >
-                    {createSnapshotMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    ) : null}
-                    Save
-                </Button>
-             </div>
-             {createSnapshotMutation.isError && (
-                <p className="text-xs text-destructive mt-1">
-                    Error: {(createSnapshotMutation.error as Error)?.message || 'Could not save snapshot.'}
-                </p>
-             )}
-             <p className="text-xs text-muted-foreground mt-1">Note: Saving captures the current workflow structure. Execution state saving needs context.</p>
+        <div className="mt-6 space-y-4">
+          <div className="flex gap-2">
+            <Input
+              placeholder="Snapshot name"
+              value={snapshotName}
+              onChange={e => setSnapshotName(e.target.value)}
+              disabled={isCreating}
+            />
+            <Button onClick={handleSaveSnapshot} disabled={isCreating || !snapshotName.trim()}>
+              {isCreating ? 'Saving...' : 'Save Snapshot'}
+            </Button>
           </div>
-          )}
-
-          {/* Section for Listing Snapshots */} 
-          <div>
-            <h3 className="text-sm font-semibold mb-2">Available Snapshots</h3>
-            <ScrollArea className="h-[calc(100vh-300px)] pr-4"> {/* Adjust height as needed */} 
-              {isLoadingSnapshots && (
-                <div className="space-y-2">
-                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
-                </div>
-              )}
-              {snapshotsError && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Error Loading Snapshots</AlertTitle>
-                  <AlertDescription>{(snapshotsError as Error).message}</AlertDescription>
-                </Alert>
-              )}
-              {!isLoadingSnapshots && !snapshotsError && (!snapshots || snapshots.length === 0) && (
-                <p className="text-sm text-muted-foreground text-center py-4">No snapshots found for this workflow.</p>
-              )}
-              {!isLoadingSnapshots && !snapshotsError && snapshots && snapshots.length > 0 && (
-                <ul className="space-y-2">
-                  {snapshots.map((snapshot) => (
-                    <li key={snapshot.id} className="flex justify-between items-center p-3 border rounded-md bg-card">
+          {isLoading ? (
+            <div className="space-y-2">
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded" />)}
+            </div>
+          ) : error ? (
+            <Alert variant="destructive">
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>Failed to load snapshots.</AlertDescription>
+            </Alert>
+          ) : (
+            <ScrollArea className="max-h-[400px] pr-2">
+              <div className="space-y-2">
+                {snapshots.length === 0 ? (
+                  <div className="text-muted-foreground text-sm text-center py-8">No snapshots found for this workflow.</div>
+                ) : (
+                  snapshots.map(snapshot => (
+                    <div key={snapshot.id} className="flex items-center justify-between border rounded p-3 bg-card">
                       <div>
-                        <p className="text-sm font-medium">{snapshot.name}</p>
-                        <p className="text-xs text-muted-foreground">Saved: {new Date(snapshot.createdAt).toLocaleString()}</p>
+                        <div className="font-medium">{snapshot.name || `Snapshot from ${format(new Date(snapshot.createdAt), 'Pp')}`}</div>
+                        <div className="text-xs text-muted-foreground">{format(new Date(snapshot.createdAt), 'Pp')}</div>
                       </div>
-                      <div className="flex space-x-1">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRestoreClick(snapshot)} // Open modal
-                          disabled={isRestoring || isDeleting} // Disable if any action is pending
-                          aria-label={`Restore snapshot ${snapshot.name}`}
-                        >
-                          <RotateCcw className="h-3.5 w-3.5 mr-1" /> Restore
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => {
+                          const snapObj = snapshots.find(s => s.id === snapshot.id);
+                          if (snapObj) {
+                            setSnapshotToRestoreObj(snapObj);
+                            setIsRestoreModalOpen(true);
+                          }
+                        }}>
+                          Restore
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive hover:bg-destructive/10 h-8 w-8"
-                          onClick={() => handleDeleteClick(snapshot)}
-                          disabled={isRestoring || isDeleting}
-                          aria-label={`Delete snapshot ${snapshot.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
+                        <Button size="sm" variant="destructive" onClick={() => { setSnapshotToDelete(snapshot.id); setIsDeleteDialogOpen(true); }}>
+                          Delete
                         </Button>
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                    </div>
+                  ))
+                )}
+              </div>
             </ScrollArea>
-          </div>
+          )}
         </div>
-
-        {/* No explicit footer needed for Sheet, close is usually in header or handled by overlay click */}
+        {/* Restore Modal */}
+        <SnapshotRestoreModal
+          isOpen={isRestoreModalOpen}
+          onOpenChange={setIsRestoreModalOpen}
+          snapshotToRestore={snapshotToRestoreObj}
+          isRestoring={isRestoring}
+          onConfirmRestore={handleConfirmRestore}
+        />
+        {/* Delete Dialog */}
+        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Snapshot?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the snapshot.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmDelete} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </SheetContent>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete the snapshot
-              named "<span className="font-semibold">{snapshotToDelete?.name}</span>".
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setSnapshotToDelete(null)}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete} disabled={isDeleting} className="bg-destructive hover:bg-destructive/90">
-              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              {isDeleting ? 'Deleting...' : 'Delete Snapshot'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Restore Confirmation Modal */}
-      <SnapshotRestoreModal
-        isOpen={isRestoreModalOpen}
-        onOpenChange={setIsRestoreModalOpen}
-        snapshotToRestore={snapshotToRestore}
-        onConfirmRestore={handleConfirmRestore} // Pass the confirmation handler
-        isRestoring={isRestoring} // Pass loading state
-      />
     </Sheet>
   );
 };

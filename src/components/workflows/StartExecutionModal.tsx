@@ -1,123 +1,93 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose, // Import DialogClose for explicit close button
-} from '@/components/ui/dialog';
+import { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle } from 'lucide-react'; // Import icons
-import { useToast } from '@/hooks/use-toast'; // Corrected import path
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 interface StartExecutionModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   workflowId: string;
   workflowName: string;
-  onSubmit: (inputs: Record<string, any>) => void;
+  onSubmit: (inputs: any) => void;
   isStartingExecution: boolean;
 }
 
-export const StartExecutionModal: React.FC<StartExecutionModalProps> = ({
+export const StartExecutionModal = ({
   isOpen,
   onOpenChange,
   workflowId,
   workflowName,
   onSubmit,
   isStartingExecution,
-}) => {
-  const [inputJson, setInputJson] = useState('{}');
-  const [jsonError, setJsonError] = useState<string | null>(null);
+}: StartExecutionModalProps) => {
   const { toast } = useToast();
+  const [inputValue, setInputValue] = useState('');
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
-  // Reset state when modal opens or workflow changes
   useEffect(() => {
     if (isOpen) {
-      setInputJson('{}');
+      setInputValue('');
       setJsonError(null);
     }
-  }, [isOpen, workflowId]);
+  }, [isOpen]);
 
-  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInputJson(event.target.value);
-    setJsonError(null); // Clear error on input change
-  };
-
-  const handleSubmit = () => {
-    let parsedInputs: Record<string, any>;
+  const handleStart = () => {
     try {
-      parsedInputs = JSON.parse(inputJson);
-      if (typeof parsedInputs !== 'object' || parsedInputs === null || Array.isArray(parsedInputs)) {
-        throw new Error('Input must be a valid JSON object.');
-      }
+      const parsed = inputValue.trim() ? JSON.parse(inputValue) : {};
       setJsonError(null);
-      onSubmit(parsedInputs); // Call the parent submit handler
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Invalid JSON format.';
-      setJsonError(message);
-      toast({
-        title: 'Invalid Input',
-        description: message,
-        variant: 'destructive',
-      });
+      onSubmit(parsed);
+    } catch (err: any) {
+      setJsonError('Invalid JSON: ' + (err.message || 'Check your input.'));
+      toast({ title: 'Invalid JSON', description: err.message || 'Check your input.', variant: 'destructive' });
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent>
         <DialogHeader>
-          <DialogTitle>Start Execution: {workflowName}</DialogTitle>
+          <DialogTitle>Start Execution for {workflowName}</DialogTitle>
           <DialogDescription>
-            Provide initial inputs for the workflow as a JSON object. These inputs
-            can be accessed in stage prompts using {'{{inputs.yourKey}}'} syntax.
+            Enter initial input data for this workflow. Use JSON format. Leave blank for no input.
           </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-1 items-center gap-4">
-            <Label htmlFor="initial-inputs" className="text-left">
-              Initial Inputs (JSON)
-            </Label>
-            <Textarea
-              id="initial-inputs"
-              value={inputJson}
-              onChange={handleInputChange}
-              placeholder='{ "topic": "AI agents", "tone": "informative" }'
-              rows={6}
-              className={`font-mono ${jsonError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
-              disabled={isStartingExecution}
-            />
-            {jsonError && (
-              <p className="text-sm text-destructive flex items-center">
-                <AlertCircle className="h-4 w-4 mr-1" />
-                {jsonError}
-              </p>
+        <div className="space-y-2">
+          <Label htmlFor="initial-inputs">Initial Inputs (JSON)</Label>
+          <Textarea
+            id="initial-inputs"
+            value={inputValue}
+            onChange={e => setInputValue(e.target.value)}
+            placeholder="{\n  \"key\": \"value\"\n}"
+            disabled={isStartingExecution}
+            className={cn(
+              'min-h-[120px] font-mono',
+              jsonError ? 'border-destructive focus-visible:ring-destructive' : ''
             )}
-          </div>
+          />
+          {jsonError && (
+            <Alert variant="destructive">
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{jsonError}</AlertDescription>
+            </Alert>
+          )}
         </div>
         <DialogFooter>
-          <DialogClose asChild>
-            <Button type="button" variant="outline" disabled={isStartingExecution}>
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button type="button" onClick={handleSubmit} disabled={isStartingExecution || !!jsonError}>
-            {isStartingExecution ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Starting...
-              </>
-            ) : (
-              'Start Execution'
-            )}
+          <Button
+            onClick={handleStart}
+            disabled={isStartingExecution}
+            className="w-full"
+          >
+            {isStartingExecution ? 'Starting...' : 'Start Execution'}
           </Button>
+          <DialogClose asChild>
+            <Button variant="outline" className="w-full mt-2" disabled={isStartingExecution}>Cancel</Button>
+          </DialogClose>
         </DialogFooter>
       </DialogContent>
     </Dialog>
