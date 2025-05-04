@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Add any other custom global base styles below */
+body {
+  /* Example: Add default background and text color */
+  @apply bg-background text-foreground;
+}

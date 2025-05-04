@@ -10,7 +10,7 @@ interface RouteParams {
 }
 
 // GET /api/executions/{executionId} - Fetch a specific execution
-export async function GET(request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: { params: { executionId: string } }) {
   try {
     const { userId } = await auth();
     const { executionId } = params;
@@ -46,7 +46,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 }
 
 // PUT /api/executions/{executionId} - Update an execution (e.g., change status)
-export async function PUT(request: Request, { params }: RouteParams) {
+export async function PUT(request: Request, { params }: { params: { executionId: string } }) {
   try {
     const { userId } = await auth();
     const { executionId } = params;
@@ -100,7 +100,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 }
 
 // DELETE /api/executions/{executionId} - Delete a specific execution
-export async function DELETE(request: Request, { params }: RouteParams) {
+export async function DELETE(request: Request, { params }: { params: { executionId: string } }) {
   try {
     const { userId } = await auth();
     const { executionId } = params;

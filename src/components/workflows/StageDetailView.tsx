@@ -76,13 +76,15 @@ export const StageDetailView = ({
   };
 
   const handleTakeSnapshot = () => {
-    if (!latestLogForStage?.executionId) return;
-    const stateData = { prompt };
+    if (!workflowId) return;
     const snapshotName = `Snapshot @ ${format(new Date(), 'Pp')}`;
-    createSnapshot({ executionId: latestLogForStage.executionId, stageId: stage.id, name: snapshotName, stateData }, {
-      onSuccess: () => {},
-      onError: () => {},
-    });
+    createSnapshot(
+      { workflowId: workflowId, name: snapshotName },
+      {
+        onSuccess: () => {},
+        onError: () => {},
+      }
+    );
   };
 
   const handleManualValidation = (isPass: boolean) => {

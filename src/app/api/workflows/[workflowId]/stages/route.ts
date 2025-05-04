@@ -10,7 +10,7 @@ interface RouteParams {
 }
 
 // GET /api/workflows/{workflowId}/stages - Fetch all stages for a specific workflow
-export async function GET(request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: { params: { workflowId: string } }) {
   try {
     const { userId } = await auth();
     const { workflowId } = params;
@@ -43,7 +43,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 }
 
 // POST /api/workflows/{workflowId}/stages - Create a new stage for a specific workflow
-export async function POST(request: Request, { params }: RouteParams) {
+export async function POST(request: Request, { params }: { params: { workflowId: string } }) {
   try {
     const { userId } = await auth();
     const { workflowId } = params;

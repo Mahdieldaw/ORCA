@@ -1,4 +1,37 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
+import { Pin, PinOff, Search } from 'lucide-react';
+// If you add Tabs primitives later, import them from shadcn/ui
+
+// TODO: Replace with shadcn/ui Tabs primitives when available in your project
+function Tabs({ value, onValueChange, children, className }: any) {
+  return <div className={className}>{children}</div>;
+}
+function TabsList({ children, className }: any) {
+  return <div className={cn('flex space-x-2 border-b mb-2', className)}>{children}</div>;
+}
+function TabsTrigger({ value, activeValue, onClick, children, className }: any) {
+  return (
+    <Button
+      type="button"
+      variant={value === activeValue ? 'secondary' : 'ghost'}
+      size="sm"
+      className={cn('rounded-b-none', className, value === activeValue && 'border-b-2 border-primary')}
+      onClick={onClick}
+      aria-selected={value === activeValue}
+      tabIndex={0}
+    >
+      {children}
+    </Button>
+  );
+}
+
+export interface MemoryContextViewerProps {
+  workflowId: string | null;
+}
 
 type MemoryItem = {
   id: string;
@@ -8,9 +41,9 @@ type MemoryItem = {
   isPinned: boolean;
 };
 
-export const MemoryContextViewer = () => {
+export const MemoryContextViewer: React.FC<MemoryContextViewerProps> = ({ workflowId }) => {
   const [activeTab, setActiveTab] = useState<'context' | 'memory'>('context');
-  const [darkMode, setDarkMode] = useState(true); // Match the main interface
+  const [search, setSearch] = useState('');
   const [memoryItems, setMemoryItems] = useState<MemoryItem[]>([
     {
       id: '1',
@@ -41,32 +74,15 @@ export const MemoryContextViewer = () => {
       isPinned: false
     }
   ]);
-
-  // Check for dark mode preference in localStorage or from parent component
-  useEffect(() => {
-    const isDarkMode = document.documentElement.classList.contains('dark');
-    setDarkMode(isDarkMode);
-    
-    // Listen for theme changes
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'class') {
-          setDarkMode(document.documentElement.classList.contains('dark'));
-        }
-      });
-    });
-    
-    observer.observe(document.documentElement, { attributes: true });
-    
-    return () => observer.disconnect();
-  }, []);
+  // TODO: Fetch memory items from API based on props (e.g., workflowId)
 
   const togglePin = (id: string) => {
-    setMemoryItems(items => 
-      items.map(item => 
+    setMemoryItems(items =>
+      items.map(item =>
         item.id === id ? { ...item, isPinned: !item.isPinned } : item
       )
     );
+    // TODO: Call API mutation to update pinned status
   };
 
   const formatDate = (dateString: string) => {
@@ -74,127 +90,118 @@ export const MemoryContextViewer = () => {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Theme classes
-  const themeClasses = {
-    card: darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200',
-    text: darkMode ? 'text-gray-100' : 'text-gray-800',
-    textSecondary: darkMode ? 'text-gray-300' : 'text-gray-600',
-    textMuted: darkMode ? 'text-gray-400' : 'text-gray-500',
-    border: darkMode ? 'border-gray-700' : 'border-gray-200',
-    highlight: darkMode ? 'bg-cyan-900 text-cyan-300' : 'bg-blue-50 text-blue-600',
-    itemBg: darkMode ? 'bg-gray-700' : 'bg-gray-50',
-    hoverBg: darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-50',
-    buttonText: darkMode ? 'text-cyan-300' : 'text-blue-600',
-    buttonHover: darkMode ? 'hover:text-cyan-100' : 'hover:text-blue-700',
-    inputBg: darkMode ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-300',
-    tabActive: darkMode ? 'bg-gray-700 text-gray-100 border-gray-600 border-b-transparent' : 
-                        'bg-gray-100 text-gray-800 border-gray-200 border-b-transparent',
-    tabInactive: darkMode ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'
-  };
+  const filteredMemory = search
+    ? memoryItems.filter(item =>
+        item.content.toLowerCase().includes(search.toLowerCase()) ||
+        item.source.toLowerCase().includes(search.toLowerCase())
+      )
+    : memoryItems;
 
   return (
-    <div className={`${themeClasses.card} rounded-xl shadow-lg h-[calc(100vh-8rem)] flex flex-col border ${themeClasses.border}`}>
-      <div className={`border-b ${themeClasses.border} p-4`}>
-        <h2 className={`font-medium ${themeClasses.text}`}>Memory Context</h2>
-        
-        {/* Tab navigation */}
-        <div className="flex mt-2">
-          <button 
-            className={`px-3 py-1.5 text-sm font-medium transition-colors rounded-t-lg ${
-              activeTab === 'context' 
-                ? themeClasses.tabActive
-                : themeClasses.tabInactive
-            }`}
-            onClick={() => setActiveTab('context')}
-          >
-            Context
-          </button>
-          <button 
-            className={`px-3 py-1.5 text-sm font-medium transition-colors rounded-t-lg ml-2 ${
-              activeTab === 'memory' 
-                ? themeClasses.tabActive
-                : themeClasses.tabInactive
-            }`}
-            onClick={() => setActiveTab('memory')}
-          >
-            Memory
-          </button>
-        </div>
-      </div>
-
-      <div className="p-4 flex-1 overflow-y-auto">
+    <Card className="h-[calc(100vh-8rem)] flex flex-col">
+      <CardHeader className="border-b p-4">
+        <CardTitle className="text-base">Memory Context</CardTitle>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
+          <TabsList>
+            <TabsTrigger
+              value="context"
+              activeValue={activeTab}
+              onClick={() => setActiveTab('context')}
+            >
+              Context
+            </TabsTrigger>
+            <TabsTrigger
+              value="memory"
+              activeValue={activeTab}
+              onClick={() => setActiveTab('memory')}
+            >
+              Memory
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-y-auto p-4">
         {activeTab === 'context' ? (
           <div className="space-y-4">
-            <div className={`${darkMode ? 'bg-cyan-900 border-cyan-800' : 'bg-blue-50 border-blue-100'} p-3 rounded-lg border`}>
-              <h3 className={`text-sm font-medium ${darkMode ? 'text-cyan-300' : 'text-blue-800'} mb-1`}>Current Context</h3>
-              <p className={`text-xs ${darkMode ? 'text-cyan-300/70' : 'text-blue-700'}`}>
-                This panel shows relevant context for the current stage in your workflow.
-                Pin items to keep them accessible across stages.
+            <div className="bg-blue-50 dark:bg-cyan-900 border border-blue-100 dark:border-cyan-800 p-3 rounded-lg">
+              <h3 className="text-sm font-medium text-blue-800 dark:text-cyan-300 mb-1">Current Context</h3>
+              <p className="text-xs text-blue-700 dark:text-cyan-300/70">
+                This panel shows relevant context for the current stage in your workflow. Pin items to keep them accessible across stages.
               </p>
             </div>
-
+            {memoryItems.filter(item => item.isPinned).length === 0 && (
+              <div className="text-xs text-muted-foreground">No pinned items.</div>
+            )}
             {memoryItems.filter(item => item.isPinned).map(item => (
-              <div key={item.id} className={`p-3 rounded-lg border ${themeClasses.border} ${themeClasses.itemBg}`}>
+              <div key={item.id} className="p-3 rounded-lg border bg-muted dark:bg-muted/50">
                 <div className="flex justify-between items-start mb-1">
-                  <span className={`text-xs font-medium ${themeClasses.textMuted}`}>{item.source}</span>
-                  <button 
+                  <span className="text-xs font-medium text-muted-foreground">{item.source}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => togglePin(item.id)}
-                    className="text-yellow-500 hover:text-yellow-300"
-                    aria-label={item.isPinned ? "Unpin this item" : "Pin this item"}
+                    aria-label={item.isPinned ? 'Unpin this item' : 'Pin this item'}
                   >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                  </button>
+                    {item.isPinned ? (
+                      <Pin className="w-4 h-4 text-yellow-500" fill="currentColor" />
+                    ) : (
+                      <PinOff className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </Button>
                 </div>
-                <p className={`text-sm ${themeClasses.text} mb-1`}>{item.content}</p>
-                <div className={`text-xs ${themeClasses.textMuted}`}>{formatDate(item.timestamp)}</div>
+                <p className="text-sm mb-1 text-foreground">{item.content}</p>
+                <div className="text-xs text-muted-foreground">{formatDate(item.timestamp)}</div>
               </div>
             ))}
           </div>
         ) : (
           <div className="space-y-4">
             <div className="relative">
-              <input
+              <Input
                 type="text"
                 placeholder="Search in memory..."
-                className={`w-full border rounded-lg px-3 py-2 text-sm focus:ring-cyan-500 focus:border-cyan-500 ${themeClasses.inputBg} ${themeClasses.text}`}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="pr-8"
               />
-              <svg className={`w-4 h-4 ${themeClasses.textMuted} absolute right-3 top-2.5`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
+              <Search className="w-4 h-4 text-muted-foreground absolute right-2.5 top-2.5 pointer-events-none" />
             </div>
-
-            {memoryItems.map(item => (
-              <div key={item.id} className={`p-3 rounded-lg border ${themeClasses.border} transition-colors ${themeClasses.hoverBg}`}>
+            {filteredMemory.length === 0 && (
+              <div className="text-xs text-muted-foreground">No memory items found.</div>
+            )}
+            {filteredMemory.map(item => (
+              <div key={item.id} className={cn(
+                'p-3 rounded-lg border bg-muted dark:bg-muted/50 transition-colors',
+                'hover:bg-accent dark:hover:bg-accent/50'
+              )}>
                 <div className="flex justify-between items-start mb-1">
-                  <span className={`text-xs font-medium ${themeClasses.textMuted}`}>{item.source}</span>
-                  <button 
+                  <span className="text-xs font-medium text-muted-foreground">{item.source}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     onClick={() => togglePin(item.id)}
-                    className={item.isPinned ? "text-yellow-500 hover:text-yellow-300" : `${themeClasses.textMuted} hover:text-yellow-500`}
-                    aria-label={item.isPinned ? "Unpin this item" : "Pin this item"}
+                    aria-label={item.isPinned ? 'Unpin this item' : 'Pin this item'}
                   >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                  </button>
+                    {item.isPinned ? (
+                      <Pin className="w-4 h-4 text-yellow-500" fill="currentColor" />
+                    ) : (
+                      <PinOff className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </Button>
                 </div>
-                <p className={`text-sm ${themeClasses.text} mb-1`}>{item.content}</p>
+                <p className="text-sm mb-1 text-foreground">{item.content}</p>
                 <div className="flex justify-between items-center">
-                  <span className={`text-xs ${themeClasses.textMuted}`}>{formatDate(item.timestamp)}</span>
-                  <button className={`text-xs ${themeClasses.buttonText} ${themeClasses.buttonHover}`}>Insert</button>
+                  <span className="text-xs text-muted-foreground">{formatDate(item.timestamp)}</span>
+                  <Button variant="link" size="sm" className="text-xs px-0 h-6">Insert</Button>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
-
-      <div className={`border-t ${themeClasses.border} p-4`}>
-        <button className={`w-full px-4 py-2 ${themeClasses.itemBg} ${themeClasses.hoverBg} rounded-lg transition-colors text-sm ${themeClasses.text}`}>
-          Add Note
-        </button>
-      </div>
-    </div>
+      </CardContent>
+      <CardFooter className="border-t p-4">
+        <Button className="w-full" variant="secondary">Add Note</Button>
+      </CardFooter>
+    </Card>
   );
 };

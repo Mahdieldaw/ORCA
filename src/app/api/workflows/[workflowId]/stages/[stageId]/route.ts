@@ -19,7 +19,7 @@ async function verifyWorkflowOwnership(userId: string, workflowId: string): Prom
 }
 
 // GET /api/workflows/{workflowId}/stages/{stageId} - Fetch a specific stage
-export async function GET(request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: { params: { workflowId: string; stageId: string } }) {
   try {
     const { userId } = await auth();
     const { workflowId, stageId } = params;
@@ -53,7 +53,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 }
 
 // PUT /api/workflows/{workflowId}/stages/{stageId} - Update a specific stage
-export async function PUT(request: Request, { params }: RouteParams) {
+export async function PUT(request: Request, { params }: { params: { workflowId: string; stageId: string } }) {
   try {
     const { userId } = await auth();
     const { workflowId, stageId } = params;
@@ -139,7 +139,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 }
 
 // DELETE /api/workflows/{workflowId}/stages/{stageId} - Delete a specific stage
-export async function DELETE(request: Request, { params }: RouteParams) {
+export async function DELETE(request: Request, { params }: { params: { workflowId: string; stageId: string } }) {
   try {
     const { userId } = await auth();
     const { workflowId, stageId } = params;

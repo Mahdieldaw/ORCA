@@ -10,7 +10,7 @@ interface RouteParams {
 }
 
 // GET /api/snapshots/{snapshotId} - Fetch a specific snapshot (including data)
-export async function GET(request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: { params: { snapshotId: string } }) {
   try {
     const { userId } = await auth();
     const { snapshotId } = params;
@@ -39,7 +39,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 }
 
 // DELETE /api/snapshots/{snapshotId} - Delete a specific snapshot
-export async function DELETE(request: Request, { params }: RouteParams) {
+export async function DELETE(request: Request, { params }: { params: { snapshotId: string } }) {
   try {
     const { userId } = await auth();
     const { snapshotId } = params;

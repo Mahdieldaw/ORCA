@@ -10,7 +10,7 @@ interface RouteParams {
 }
 
 // GET /api/workflows/{workflowId} - Fetch a specific workflow
-export async function GET(request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: { params: { workflowId: string } }) {
   try {
     const { userId } = await auth();
     const { workflowId } = params;
@@ -40,7 +40,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 }
 
 // PUT /api/workflows/{workflowId} - Update a specific workflow
-export async function PUT(request: Request, { params }: RouteParams) {
+export async function PUT(request: Request, { params }: { params: { workflowId: string } }) {
   try {
     const { userId } = await auth();
     const { workflowId } = params;
@@ -78,7 +78,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 }
 
 // DELETE /api/workflows/{workflowId} - Delete a specific workflow
-export async function DELETE(request: Request, { params }: RouteParams) {
+export async function DELETE(request: Request, { params }: { params: { workflowId: string } }) {
   try {
     const { userId } = await auth();
     const { workflowId } = params;
