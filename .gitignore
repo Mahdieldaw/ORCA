@@ -1,4 +1,60 @@
 .next/
+tsconfig.tsbuildinfo
+Documents/
+Workspace.code-workspace
+# Compiled output
+dist/
+out/
+# Dependency directories
+node_modules/
+jspm_packages/
+# IDEs and editors
+.idea/
+.vscode/
+# TypeScript cache
+*.tsbuildinfo
+# Various
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local.example
+.env.development.example
+.env.test.example
+.env.production.example
+.env.example
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+pnpm-debug.log
+lerna-debug.log
+# Build output
+build
+# Profiling output
+profile
+# Coverage reports
+coverage
+# TypeScript declaration files
+*.d.ts
+*.d.ts.map
+# Bundler output
+*.bundle.js
+*.bundle.js.map
+# Next.js output
+.next
+# Nuxt.js output
+.nuxt
+# Gatsby files
+.cache/
+public
+# SvelteKit files
+.svelte-kit
+# Astro files
+.astro
+# Remix files
+remix.build
+remix.cache
 .env
 # Logs
 logs
