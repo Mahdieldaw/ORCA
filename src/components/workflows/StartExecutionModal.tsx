@@ -59,6 +59,7 @@ export const StartExecutionModal = ({
         </DialogHeader>
         <div className="space-y-2">
           <Label htmlFor="initial-inputs">Initial Inputs (JSON)</Label>
+          {/* --- Temporarily Comment Out Start ---
           <Textarea
             id="initial-inputs"
             value={inputValue}
@@ -70,6 +71,7 @@ export const StartExecutionModal = ({
               jsonError ? 'border-destructive focus-visible:ring-destructive' : ''
             )}
           />
+          --- Temporarily Comment Out End --- */}
           {jsonError && (
             <Alert variant="destructive">
               <AlertTitle>Error</AlertTitle>

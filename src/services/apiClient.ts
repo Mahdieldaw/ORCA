@@ -1,41 +1,30 @@
 // src/services/apiClient.ts
 import axios from 'axios';
-// Assume a helper function `getAuthToken` exists to retrieve the JWT
-// import { getAuthToken } from '@/utils/auth'; // Placeholder for actual auth helper
+import { getToken } from '@clerk/nextjs';
 
 const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api', // Adjust port/path as needed
+  baseURL: process.env.NEXT_PUBLIC_API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Add a request interceptor to include the auth token
 apiClient.interceptors.request.use(async (config) => {
   let token: string | null = null;
 
-  // Ensure this runs only on the client-side where Clerk context is available
   if (typeof window !== 'undefined') {
     try {
-      // Use Clerk's recommended client-side token retrieval function
       token = await getToken();
-      // console.log("Clerk token fetched:", token ? "Yes" : "No"); // Optional: for debugging
     } catch (error) {
-      console.error("Error fetching Clerk token:", error);
-      // Handle token fetching errors if necessary, though getToken usually handles internal states
+      console.error('Error fetching Clerk token:', error);
     }
   }
 
-  // Add the fetched Clerk token to the header if it exists
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
-  } else {
-     // Optional: Decide if you want to remove any potentially stale Authorization header if no token is found
-     // delete config.headers.Authorization;
-     console.log("No Clerk token found, request sent without Authorization header.");
   }
 
-  return config; // Return the modified config
-}, (error) => {
-  console.error('Axios request error:', error);
-  return Promise.reject(error);
+  return config;
 });
 
 export default apiClient;
