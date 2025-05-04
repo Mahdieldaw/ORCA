@@ -1,7 +1,7 @@
 // src/app/api/models/route.ts
 import { PrismaClient } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server'; // Assuming Clerk for auth, might not be needed if models are public
+import { auth } from '@clerk/nextjs/server';
 
 const prisma = new PrismaClient();
 
@@ -9,7 +9,8 @@ const prisma = new PrismaClient();
 // Authentication might not be strictly required if models are considered public info
 export async function GET(request: Request) {
   try {
-    // const { userId } = auth(); // Uncomment if auth is needed
+    // If auth is needed, use this block:
+    // const { userId } = await auth();
     // if (!userId) {
     //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     // }

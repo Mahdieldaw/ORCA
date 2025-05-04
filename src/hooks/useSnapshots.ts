@@ -1,17 +1,18 @@
 // src/hooks/useSnapshots.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@clerk/nextjs';
 import {
   fetchSnapshots,
   createSnapshot,
   fetchSnapshotDetail,
-  restoreSnapshot, // Added
-  deleteSnapshot,  // Added
+  restoreSnapshot,
+  deleteSnapshot,
   SnapshotSummary,
   SnapshotDetail,
-  WorkflowDetail,  // Added for restore return type
-  ExecutionSummary // Added for restore return type
+  WorkflowDetail,
+  ExecutionSummary
 } from '@/services/apiClient';
-import { workflowKeys, executionKeys } from './useWorkflows'; // Import keys for invalidation
+import { workflowKeys, executionKeys } from './useWorkflows';
 
 // Define query keys
 const snapshotKeys = {
@@ -24,19 +25,26 @@ const snapshotKeys = {
 
 // Hook to fetch a list of snapshots with optional filters
 export const useGetSnapshots = (filters: { workflowId?: string; stageId?: string; executionId?: string } = {}) => {
+  const { getToken } = useAuth();
   return useQuery<SnapshotSummary[], Error>({
     queryKey: snapshotKeys.list(filters),
-    queryFn: () => fetchSnapshots(filters),
-    // Optional: Add staleTime, cacheTime, etc.
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchSnapshots(filters, token);
+    },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 };
 
 // Hook to fetch details of a single snapshot
 export const useGetSnapshotDetail = (snapshotId: string, options?: { enabled?: boolean }) => {
+  const { getToken } = useAuth();
   return useQuery<SnapshotDetail, Error>({
     queryKey: snapshotKeys.detail(snapshotId),
-    queryFn: () => fetchSnapshotDetail(snapshotId),
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchSnapshotDetail(snapshotId, token);
+    },
     enabled: options?.enabled ?? !!snapshotId, // Only run if snapshotId is provided and enabled
     staleTime: 15 * 60 * 1000, // 15 minutes
   });
@@ -45,26 +53,26 @@ export const useGetSnapshotDetail = (snapshotId: string, options?: { enabled?: b
 // Hook to create a new snapshot
 export const useCreateSnapshot = () => {
   const queryClient = useQueryClient();
+  const { getToken } = useAuth();
 
   return useMutation<
     SnapshotDetail, // Type of data returned by the mutation
     Error, // Type of error
-    { executionId: string; stageId: string; name: string; stateData: any } // Type of variables passed to the mutation function
+    { workflowId: string; name: string; description?: string } // Type of variables passed to the mutation function
   >({
-    mutationFn: createSnapshot,
+    mutationFn: async (variables) => {
+      const token = await getToken();
+      return createSnapshot(variables, token);
+    },
     onSuccess: (newSnapshot) => {
       // Invalidate and refetch snapshot lists after creation
       queryClient.invalidateQueries({ queryKey: snapshotKeys.lists() });
-
       // Optionally, pre-populate the cache for the new snapshot's detail
       queryClient.setQueryData(snapshotKeys.detail(newSnapshot.id), newSnapshot);
-
       console.log('Snapshot created successfully:', newSnapshot);
-      // You might want to add user feedback here (e.g., toast notification)
     },
     onError: (error) => {
       console.error('Error creating snapshot:', error);
-      // Add error handling/feedback here
     },
   });
 };
@@ -72,12 +80,16 @@ export const useCreateSnapshot = () => {
 // Hook to restore from a snapshot (Mutation)
 export const useRestoreSnapshot = () => {
   const queryClient = useQueryClient();
+  const { getToken } = useAuth();
   return useMutation<
     WorkflowDetail | ExecutionSummary, // Return type might be workflow or execution
     Error,                            // Error type
     string                            // Input variable (snapshotId)
   >({
-    mutationFn: (snapshotId) => restoreSnapshot(snapshotId),
+    mutationFn: async (snapshotId) => {
+      const token = await getToken();
+      return restoreSnapshot(snapshotId, token);
+    },
     onSuccess: (restoredItem, snapshotId) => {
       console.log(`Restored successfully from snapshot ${snapshotId}:`, restoredItem);
       // Invalidate relevant lists depending on what was restored
@@ -99,12 +111,16 @@ export const useRestoreSnapshot = () => {
 // Hook to delete a snapshot (Mutation)
 export const useDeleteSnapshot = () => {
   const queryClient = useQueryClient();
+  const { getToken } = useAuth();
   return useMutation<
     void,   // Return type
     Error,  // Error type
     string  // Input variable (snapshotId)
   >({
-    mutationFn: (snapshotId) => deleteSnapshot(snapshotId),
+    mutationFn: async (snapshotId) => {
+      const token = await getToken();
+      return deleteSnapshot(snapshotId, token);
+    },
     onSuccess: (_, snapshotId) => {
       console.log(`Snapshot ${snapshotId} deleted successfully`);
       // Invalidate snapshot lists

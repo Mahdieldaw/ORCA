@@ -38,7 +38,7 @@ export const HybridThinkDrawer = ({ isOpen, onOpenChange, workflowId }: HybridTh
   const handleSaveSnapshot = () => {
     if (!workflowId || !snapshotName.trim()) return;
     createSnapshot(
-      { executionId: workflowId, name: snapshotName.trim() },
+      { workflowId: workflowId, name: snapshotName.trim() },
       {
         onSuccess: () => {
           toast({ title: 'Snapshot saved', description: 'Workflow snapshot created.' });

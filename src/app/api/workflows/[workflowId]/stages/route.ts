@@ -12,7 +12,7 @@ interface RouteParams {
 // GET /api/workflows/{workflowId}/stages - Fetch all stages for a specific workflow
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     const { workflowId } = params;
 
     if (!userId) {
@@ -45,7 +45,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 // POST /api/workflows/{workflowId}/stages - Create a new stage for a specific workflow
 export async function POST(request: Request, { params }: RouteParams) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     const { workflowId } = params;
 
     if (!userId) {
@@ -76,41 +76,45 @@ export async function POST(request: Request, { params }: RouteParams) {
       retryLimit,
       nextStageOnPass,
       nextStageOnFail,
-      flowiseConfig
+      flowiseConfig,
     } = body;
 
-    // Basic validation - stageOrder is crucial
     if (typeof stageOrder !== 'number') {
       return NextResponse.json({ error: 'Stage order (stageOrder) is required and must be a number' }, { status: 400 });
     }
 
-    // TODO: Add more robust validation for other fields as needed
+    // Check for stageOrder conflict before creating
+    const conflict = await prisma.stage.findFirst({
+      where: { workflowId, stageOrder },
+    });
+    if (conflict) {
+      return NextResponse.json({ error: 'Stage order conflict' }, { status: 409 });
+    }
 
     const newStage = await prisma.stage.create({
       data: {
-        workflowId: workflowId,
-        userId: userId, // Denormalized user ID
-        stageOrder: stageOrder,
+        workflowId,
+        userId,
+        stageOrder,
         name: name || null,
         promptTemplate: promptTemplate || null,
         modelId: modelId || null,
         validationType: validationType || 'none',
-        validationCriteria: validationCriteria || {},
-        outputVariables: outputVariables || {},
+        validationCriteria: validationCriteria || null,
+        outputVariables: outputVariables || [],
         inputVariableMapping: inputVariableMapping || {},
         retryLimit: retryLimit || 0,
         nextStageOnPass: nextStageOnPass || null,
         nextStageOnFail: nextStageOnFail || null,
-        flowiseConfig: flowiseConfig || {},
+        flowiseConfig: flowiseConfig || null,
       },
     });
 
     return NextResponse.json(newStage, { status: 201 });
   } catch (error: any) {
     console.error(`Error creating stage for workflow ${params.workflowId}:`, error);
-    // Handle potential unique constraint violation (workflowId, stageOrder)
     if (error.code === 'P2002' && error.meta?.target?.includes('workflowId') && error.meta?.target?.includes('stageOrder')) {
-        return NextResponse.json({ error: `Stage with order ${body.stageOrder} already exists in this workflow.` }, { status: 409 }); // Conflict
+      return NextResponse.json({ error: 'Stage order conflict' }, { status: 409 });
     }
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

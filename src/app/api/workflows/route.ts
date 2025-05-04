@@ -1,14 +1,14 @@
 // src/app/api/workflows/route.ts
 import { PrismaClient } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server'; // Assuming Clerk for auth
+import { auth } from '@clerk/nextjs/server';
 
 const prisma = new PrismaClient();
 
 // GET /api/workflows - Fetch all workflows for the authenticated user
 export async function GET(request: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -31,7 +31,7 @@ export async function GET(request: Request) {
 // POST /api/workflows - Create a new workflow for the authenticated user
 export async function POST(request: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
 
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

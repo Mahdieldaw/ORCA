@@ -9,14 +9,13 @@ export async function POST(
   request: Request,
   { params }: { params: { executionId: string; stageId: string } }
 ) {
-  const authResult = await auth(); // Await the auth() call
-  const userId = authResult.userId;
+  const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { executionId, stageId } = params;
-  const { validationResult, comments } = await request.json(); // Assuming validation result and comments are sent in the body
+  const { validationResult, comments } = await request.json();
 
   if (!executionId || !stageId) {
     return NextResponse.json({ error: 'Missing executionId or stageId' }, { status: 400 });
@@ -54,28 +53,8 @@ export async function POST(
       data: {
         validationResult: validationResult ? 'pass' : 'fail', // Store as 'pass' or 'fail'
         validatorNotes: comments, // Store comments from request body
-        // Optionally update log status here too, e.g., to 'COMPLETED' or 'FAILED'
-        // status: validationResult ? 'COMPLETED' : 'FAILED',
       },
     });
-
-    // 3. Optionally, update the overall StageExecution status if needed
-    //    This might depend on the workflow logic (e.g., does validation complete the stage?)
-    // await prisma.stageExecution.update({
-    //   where: {
-    //      // Need a unique identifier for StageExecution, maybe composite key?
-    //      // executionId_stageId: `${executionId}_${stageId}`
-    //   },
-    //   data: {
-    //      status: validationResult ? 'COMPLETED' : 'FAILED', // Or 'AWAITING_NEXT' etc.
-    //   }
-    // });
-
-    // 4. Optionally, update the overall WorkflowExecution status
-    //    Check if this validation completes the entire workflow
-    // const workflowExecution = await prisma.workflowExecution.findUnique({ where: { id: executionId } });
-    // Check if all stages are completed...
-    // If so, update workflowExecution status to 'COMPLETED'
 
     // --- Trigger Next Stage Logic (Placeholder) ---
     if (validationResult) {

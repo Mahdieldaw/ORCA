@@ -19,7 +19,7 @@ interface GhostOverlayProps {
   currentExecutionId: string | null; // Renamed from executionId for clarity
   executionLogs: ExecutionLog[]; // Added executionLogs
   isLoading: boolean; // Added isLoading
-  error: Error | null | unknown; // Added error
+  error: Error | null; // Update error type to be more specific
   stages: Stage[]; // Added stages for context
 }
 
@@ -46,29 +46,21 @@ import { Label } from '@/components/ui/label'; // Added Label import
 
 // Updated component to render detailed history entry using ExecutionLog type
 const HistoryEntry: React.FC<{ item: ExecutionLog }> = ({ item }) => {
-  // Note: The ExecutionLog type might need adjustment if fields like 'validationResult', 'attemptNumber', 'inputs', 'rawOutput', 'parsedOutput', 'errorMessage', 'validatorNotes' are not present.
-  // We'll use existing fields or placeholders for now.
-  const validationResult = item.status; // Using 'status' as a proxy for validationResult for now
-  const attemptNumber = item.attemptNumber ?? 1; // Assuming attemptNumber might exist, default to 1
-  const executedAt = item.completedAt ?? item.startedAt; // Use completedAt if available, else startedAt
+  const validationResult = item.validationResult; // Using validationResult directly from ExecutionLog
+  const retryCount = item.retryCount ?? 0; // Using retryCount instead of attemptNumber
+  const executedAt = item.endedAt ?? item.startedAt;
 
   return (
     <div className="p-2 border-b last:border-b-0 text-xs">
       <div className="flex justify-between items-center mb-1">
-        <p className="font-medium">Stage {item.stageOrder} <span className="text-muted-foreground">(Attempt {attemptNumber})</span></p>
-        {/* Using item.status for badge, assuming it reflects validation */}
-        <Badge variant={getStatusVariant(validationResult ?? 'pending')} className="capitalize">{validationResult ?? 'pending'}</Badge>
+        <p className="font-medium">Stage {item.stageOrder} <span className="text-muted-foreground">(Attempt {retryCount + 1})</span></p>
+        <Badge variant={getStatusVariant(validationResult ?? item.status)} className="capitalize">{validationResult ?? item.status}</Badge>
       </div>
       <p className="text-muted-foreground mb-1">Executed: {executedAt ? new Date(executedAt).toLocaleString() : 'N/A'}</p>
-      {/* Displaying available fields, mapping them to the requested structure */}
-      {item.inputData && <div><Label className="text-xxs uppercase text-muted-foreground">Inputs:</Label><pre className="text-xxs bg-muted/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(item.inputData, null, 2)}</pre></div>}
-      {/* 'rawOutput' is not directly available in ExecutionLog, using 'outputData' or 'processedOutput' as proxy */}
-      {(item.outputData || item.processedOutput) && <div><Label className="text-xxs uppercase text-muted-foreground">Output:</Label><pre className="text-xxs bg-muted/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(item.outputData ?? item.processedOutput, null, 2)}</pre></div>}
-      {/* 'parsedOutput' is not directly available, using 'processedOutput' if different logic is needed later */}
-      {/* item.parsedOutput && <div><Label className="text-xxs uppercase text-muted-foreground">Parsed Output:</Label><pre className="text-xxs bg-muted/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(item.parsedOutput, null, 2)}</pre></div> */}
+      {item.inputs && <div><Label className="text-xxs uppercase text-muted-foreground">Inputs:</Label><pre className="text-xxs bg-muted/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(item.inputs, null, 2)}</pre></div>}
+      {item.rawOutput && <div><Label className="text-xxs uppercase text-muted-foreground">Raw Output:</Label><pre className="text-xxs bg-muted/50 p-1 rounded overflow-auto max-h-20">{item.rawOutput}</pre></div>}
+      {item.processedOutput && <div><Label className="text-xxs uppercase text-muted-foreground">Processed Output:</Label><pre className="text-xxs bg-muted/50 p-1 rounded overflow-auto max-h-20">{JSON.stringify(item.processedOutput, null, 2)}</pre></div>}
       {item.errorDetails && <p className="text-destructive mt-1">Error: {item.errorDetails}</p>}
-      {/* 'validatorNotes' is not directly available in ExecutionLog */}
-      {/* item.validatorNotes && <p className="text-muted-foreground mt-1">Notes: {item.validatorNotes}</p> */}
     </div>
   );
 };
@@ -124,8 +116,7 @@ export const GhostOverlay: React.FC<GhostOverlayProps> = ({
                 <div className="flex flex-col items-center text-destructive py-4">
                   <AlertTriangle className="h-6 w-6 mb-2" />
                   <p className="text-sm">Error loading logs:</p>
-                  {/* Type-safe error message display */}
-                  <p className="text-xs">{(error instanceof Error ? error.message : String(error)) || 'An unknown error occurred.'}</p>
+                  <p className="text-xs">{error.message}</p>
                 </div>
               )}
 

@@ -49,26 +49,25 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    // Only allow updating specific fields
-    const { name, description, metadata } = body;
+    const { name, description, metadata } = await request.json();
 
-    // Check if workflow exists and belongs to the user before updating
+    // First check if the workflow exists and belongs to the user
     const existingWorkflow = await prisma.workflow.findUnique({
-      where: { id: workflowId, userId: userId },
+      where: { id: workflowId, userId: userId }
     });
 
     if (!existingWorkflow) {
       return NextResponse.json({ error: 'Workflow not found or access denied' }, { status: 404 });
     }
 
+    // Update the workflow, maintaining any fields that weren't provided in the request
     const updatedWorkflow = await prisma.workflow.update({
       where: { id: workflowId },
       data: {
         name: name !== undefined ? name : existingWorkflow.name,
         description: description !== undefined ? description : existingWorkflow.description,
         metadata: metadata !== undefined ? metadata : existingWorkflow.metadata,
-      },
+      }
     });
 
     return NextResponse.json(updatedWorkflow);
@@ -103,10 +102,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     }
 
     return NextResponse.json({ message: 'Workflow deleted successfully' }, { status: 200 }); // Or 204 No Content
-
   } catch (error) {
     console.error(`Error deleting workflow ${params.workflowId}:`, error);
-    // Handle potential foreign key constraint errors if needed, though Prisma handles cascades
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

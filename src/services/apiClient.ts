@@ -1,6 +1,6 @@
 // src/services/apiClient.ts
 import axios from 'axios';
-import { getToken } from '@clerk/nextjs';
+import type { AxiosRequestConfig } from 'axios';
 
 const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
@@ -8,26 +8,6 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
   },
 });
-
-apiClient.interceptors.request.use(async (config) => {
-  let token: string | null = null;
-
-  if (typeof window !== 'undefined') {
-    try {
-      token = await getToken();
-    } catch (error) {
-      console.error('Error fetching Clerk token:', error);
-    }
-  }
-
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  return config;
-});
-
-export default apiClient;
 
 // Define interfaces matching your backend DTOs/Entities (or import generated types)
 // It's highly recommended to share types between frontend and backend if possible
@@ -137,139 +117,125 @@ export interface SnapshotDetail {
 // --- API Function Examples --- //
 
 // Fetch all workflows (summary view)
-export const fetchWorkflows = async (): Promise<WorkflowSummary[]> => {
-  console.log('Fetching workflows from:', apiClient.defaults.baseURL + '/workflows');
-  const response = await apiClient.get('/workflows');
+export const fetchWorkflows = async (token?: string | null): Promise<WorkflowSummary[]> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.get('/workflows', config);
   return response.data;
 };
 
-// Fetch detailed information for a single execution
-export const fetchExecutionDetail = async (executionId: string): Promise<ExecutionDetail> => {
-    console.log(`Fetching execution detail for ${executionId}`);
-    // Assuming endpoint like /executions/{executionId}
-    const response = await apiClient.get(`/executions/${executionId}`);
-    return response.data;
+export const fetchExecutionDetail = async (executionId: string, token?: string | null): Promise<ExecutionDetail> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.get(`/executions/${executionId}`, config);
+  return response.data;
 };
 
-// Fetch detailed information for a single workflow
-export const fetchWorkflowDetail = async (workflowId: string): Promise<WorkflowDetail> => {
-    console.log(`Fetching workflow detail for ${workflowId} from:`, apiClient.defaults.baseURL + `/workflows/${workflowId}`);
-    const response = await apiClient.get(`/workflows/${workflowId}`);
-    return response.data;
+export const fetchWorkflowDetail = async (workflowId: string, token?: string | null): Promise<WorkflowDetail> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.get(`/workflows/${workflowId}`, config);
+  return response.data;
 };
 
-// Start a new execution for a workflow
-export const startWorkflowExecution = async (workflowId: string, inputs: any): Promise<ExecutionSummary> => {
-    console.log(`Starting execution for workflow ${workflowId} with inputs:`, inputs);
-    // Note: The API endpoint might differ, e.g., /workflows/{workflowId}/execute or /executions
-    // Adjust the endpoint based on your actual backend API structure.
-    // Assuming POST to /executions with workflowId and inputs in the body
-    const response = await apiClient.post(`/executions`, { workflowId, inputs });
-    // Or if endpoint is like /workflows/{id}/run:
-    // const response = await apiClient.post(`/workflows/${workflowId}/run`, { inputs });
-    return response.data;
+export const startWorkflowExecution = async (workflowId: string, inputs: any, token?: string | null): Promise<ExecutionSummary> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.post(`/executions`, { workflowId, inputs }, config);
+  return response.data;
 };
 
-// Fetch all executions (summary view) - potentially with filtering/pagination
-export const fetchExecutions = async (workflowId?: string): Promise<ExecutionSummary[]> => {
-    const params = workflowId ? { workflowId } : {};
-    console.log('Fetching executions with params:', params);
-    const response = await apiClient.get('/executions', { params });
-    return response.data;
+export const fetchExecutions = async (workflowId?: string, token?: string | null): Promise<ExecutionSummary[]> => {
+  const config: AxiosRequestConfig = { params: workflowId ? { workflowId } : {} };
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.get('/executions', config);
+  return response.data;
 };
 
-// Fetch logs for a specific execution
-export const fetchExecutionLogs = async (executionId: string): Promise<ExecutionLog[]> => {
-    console.log(`Fetching logs for execution ${executionId}`);
-    // Assuming endpoint like /executions/{executionId}/logs
-    const response = await apiClient.get(`/executions/${executionId}/logs`);
-    return response.data;
+export const fetchExecutionLogs = async (executionId: string, token?: string | null): Promise<ExecutionLog[]> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.get(`/executions/${executionId}/logs`, config);
+  return response.data;
 };
 
-// Update workflow metadata
-export const updateWorkflow = async (workflowId: string, data: Partial<Pick<WorkflowDetail, 'name' | 'description' | 'globalInputSchema'>>): Promise<WorkflowDetail> => {
-    console.log(`Updating workflow ${workflowId} with data:`, data);
-    const response = await apiClient.put(`/workflows/${workflowId}`, data);
-    return response.data;
+export const updateWorkflow = async (workflowId: string, data: Partial<Pick<WorkflowDetail, 'name' | 'description' | 'globalInputSchema'>>, token?: string | null): Promise<WorkflowDetail> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.put(`/workflows/${workflowId}`, data, config);
+  return response.data;
 };
 
-// Delete a workflow
-export const deleteWorkflow = async (workflowId: string): Promise<void> => {
-    console.log(`Deleting workflow ${workflowId}`);
-    await apiClient.delete(`/workflows/${workflowId}`);
+export const deleteWorkflow = async (workflowId: string, token?: string | null): Promise<void> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  await apiClient.delete(`/workflows/${workflowId}`, config);
 };
 
-// Update stage details
-export const updateStage = async (workflowId: string, stageId: string, data: Partial<Omit<StageDetail, 'id' | 'workflowId' | 'userId' | 'createdAt' | 'updatedAt'>>): Promise<StageDetail> => {
-    console.log(`Updating stage ${stageId} in workflow ${workflowId} with data:`, data);
-    const response = await apiClient.put(`/workflows/${workflowId}/stages/${stageId}`, data);
-    return response.data;
+export const updateStage = async (workflowId: string, stageId: string, data: Partial<Omit<StageDetail, 'id' | 'workflowId' | 'userId' | 'createdAt' | 'updatedAt'>>, token?: string | null): Promise<StageDetail> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.put(`/workflows/${workflowId}/stages/${stageId}`, data, config);
+  return response.data;
 };
 
-// Delete a stage
-export const deleteStage = async (workflowId: string, stageId: string): Promise<void> => {
-    console.log(`Deleting stage ${stageId} from workflow ${workflowId}`);
-    await apiClient.delete(`/workflows/${workflowId}/stages/${stageId}`);
+export const deleteStage = async (workflowId: string, stageId: string, token?: string | null): Promise<void> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  await apiClient.delete(`/workflows/${workflowId}/stages/${stageId}`, config);
 };
 
-// Record manual validation result for a stage
-export const recordManualValidation = async (executionId: string, stageId: string, result: 'pass' | 'fail'): Promise<ExecutionLog> => {
-    console.log(`Recording manual validation for stage ${stageId} in execution ${executionId}: ${result}`);
-    const response = await apiClient.post(`/executions/${executionId}/stages/${stageId}/validate`, { result });
-    return response.data; // Assuming the API returns the updated ExecutionLog
+export const recordManualValidation = async (executionId: string, stageId: string, result: 'pass' | 'fail', token?: string | null): Promise<ExecutionLog> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.post(`/executions/${executionId}/stages/${stageId}/validate`, { result }, config);
+  return response.data;
 };
 
-// Retry a failed stage
-export const retryStage = async (executionId: string, stageId: string): Promise<ExecutionLog> => {
-    console.log(`Retrying stage ${stageId} in execution ${executionId}`);
-    const response = await apiClient.post(`/executions/${executionId}/stages/${stageId}/retry`);
-    return response.data; // Assuming the API returns the new ExecutionLog for the retry attempt
+export const retryStage = async (executionId: string, stageId: string, token?: string | null): Promise<ExecutionLog> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.post(`/executions/${executionId}/stages/${stageId}/retry`, {}, config);
+  return response.data;
 };
 
-// Restore a workflow/execution from a snapshot
-export const restoreSnapshot = async (snapshotId: string): Promise<WorkflowDetail | ExecutionSummary> => { // Return type might vary based on API
-    console.log(`Restoring from snapshot ${snapshotId}`);
-    const response = await apiClient.post(`/snapshots/${snapshotId}/restore`);
-    return response.data; // Assuming API returns the newly created workflow or execution
+export const restoreSnapshot = async (snapshotId: string, token?: string | null): Promise<WorkflowDetail | ExecutionSummary> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.post(`/snapshots/${snapshotId}/restore`, {}, config);
+  return response.data;
 };
 
-// Fetch snapshots (summary view) - potentially filtered
-export const fetchSnapshots = async (filters: { workflowId?: string; stageId?: string; executionId?: string } = {}): Promise<SnapshotSummary[]> => {
-    console.log('Fetching snapshots with filters:', filters);
-    const response = await apiClient.get('/snapshots', { params: filters });
-    return response.data;
+export const fetchSnapshots = async (filters: { workflowId?: string; stageId?: string; executionId?: string } = {}, token?: string | null): Promise<SnapshotSummary[]> => {
+  const config: AxiosRequestConfig = { params: filters };
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.get('/snapshots', config);
+  return response.data;
 };
 
-// Fetch snapshot details
-export const fetchSnapshotDetail = async (snapshotId: string): Promise<SnapshotDetail> => {
-    console.log(`Fetching details for snapshot ${snapshotId}`);
-    const response = await apiClient.get(`/snapshots/${snapshotId}`);
-    return response.data;
+export const fetchSnapshotDetail = async (snapshotId: string, token?: string | null): Promise<SnapshotDetail> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.get(`/snapshots/${snapshotId}`, config);
+  return response.data;
 };
 
-// Create a snapshot
-export const createSnapshot = async (data: { executionId: string, stageId: string, name: string, stateData?: any }): Promise<SnapshotDetail> => {
-    console.log(`Creating snapshot with data:`, data);
-    const response = await apiClient.post('/snapshots', data);
-    return response.data;
+export const createSnapshot = async (data: { workflowId: string; name: string; description?: string }, token?: string | null): Promise<SnapshotDetail> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.post('/snapshots', { sourceWorkflowId: data.workflowId, name: data.name, description: data.description }, config);
+  return response.data;
 };
 
-// Delete a snapshot
-export const deleteSnapshot = async (snapshotId: string): Promise<void> => {
-    console.log(`Deleting snapshot ${snapshotId}`);
-    await apiClient.delete(`/snapshots/${snapshotId}`);
+export const deleteSnapshot = async (snapshotId: string, token?: string | null): Promise<void> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  await apiClient.delete(`/snapshots/${snapshotId}`, config);
 };
 
-// Fetch available models (if applicable)
-// export const fetchModels = async (): Promise<Model[]> => {
-//     console.log('Fetching models');
-//     const response = await apiClient.get('/models'); // Adjust endpoint if needed
-//     return response.data;
-// };
-
-// Placeholder for updating execution status (if needed directly)
-export const updateExecutionStatus = async (executionId: string, status: string): Promise<ExecutionSummary> => {
-    console.log(`Updating execution ${executionId} status to: ${status}`);
-    const response = await apiClient.put(`/executions/${executionId}`, { status });
-    return response.data;
+export const updateExecutionStatus = async (executionId: string, status: string, token?: string | null): Promise<ExecutionSummary> => {
+  const config: AxiosRequestConfig = {};
+  if (token) config.headers = { Authorization: `Bearer ${token}` };
+  const response = await apiClient.put(`/executions/${executionId}`, { status }, config);
+  return response.data;
 };

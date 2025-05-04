@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 // GET /api/executions - Fetch all executions for the authenticated user (potentially filtered)
 export async function GET(request: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -42,7 +42,7 @@ export async function GET(request: Request) {
 // POST /api/executions - Start a new workflow execution
 export async function POST(request: Request) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

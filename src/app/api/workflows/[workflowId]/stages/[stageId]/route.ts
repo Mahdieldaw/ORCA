@@ -54,7 +54,6 @@ export async function GET(request: Request, { params }: RouteParams) {
 
 // PUT /api/workflows/{workflowId}/stages/{stageId} - Update a specific stage
 export async function PUT(request: Request, { params }: RouteParams) {
-  let body;
   try {
     const { userId } = await auth();
     const { workflowId, stageId } = params;
@@ -63,14 +62,24 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify user owns the parent workflow
-    const isOwner = await verifyWorkflowOwnership(userId, workflowId);
-    if (!isOwner) {
+    // First verify workflow ownership
+    if (!await verifyWorkflowOwnership(userId, workflowId)) {
       return NextResponse.json({ error: 'Workflow not found or access denied' }, { status: 404 });
     }
 
-    body = await request.json();
-    // Only allow updating specific fields
+    // Then check if the stage exists and belongs to this workflow
+    const existingStage = await prisma.stage.findUnique({
+      where: {
+        id: stageId,
+        workflowId: workflowId,
+      },
+    });
+
+    if (!existingStage) {
+      return NextResponse.json({ error: 'Stage not found' }, { status: 404 });
+    }
+
+    // Get the update data from request body
     const {
       stageOrder,
       name,
@@ -84,41 +93,38 @@ export async function PUT(request: Request, { params }: RouteParams) {
       nextStageOnPass,
       nextStageOnFail,
       flowiseConfig,
-    } = body;
+    } = await request.json();
 
-    // Fetch the existing stage
-    const existingStage = await prisma.stage.findUnique({
-      where: { id: stageId, workflowId },
-    });
-    if (!existingStage) {
-      return NextResponse.json({ error: 'Stage not found' }, { status: 404 });
-    }
-
-    // Check for stageOrder conflict
+    // If stageOrder is being changed, check for conflicts
     if (stageOrder !== undefined && stageOrder !== existingStage.stageOrder) {
       const conflict = await prisma.stage.findFirst({
-        where: { workflowId, stageOrder, id: { not: stageId } },
+        where: {
+          workflowId,
+          stageOrder,
+          id: { not: stageId }, // Exclude current stage
+        },
       });
       if (conflict) {
         return NextResponse.json({ error: 'Stage order conflict' }, { status: 409 });
       }
     }
 
+    // Update the stage
     const updatedStage = await prisma.stage.update({
       where: { id: stageId },
       data: {
-        stageOrder: stageOrder !== undefined ? stageOrder : existingStage.stageOrder,
-        name: name !== undefined ? name : existingStage.name,
-        promptTemplate: promptTemplate !== undefined ? promptTemplate : existingStage.promptTemplate,
-        modelId: modelId !== undefined ? modelId : existingStage.modelId,
-        validationType: validationType !== undefined ? validationType : existingStage.validationType,
-        validationCriteria: validationCriteria !== undefined ? validationCriteria : existingStage.validationCriteria,
-        outputVariables: outputVariables !== undefined ? outputVariables : existingStage.outputVariables,
-        inputVariableMapping: inputVariableMapping !== undefined ? inputVariableMapping : existingStage.inputVariableMapping,
-        retryLimit: retryLimit !== undefined ? retryLimit : existingStage.retryLimit,
-        nextStageOnPass: nextStageOnPass !== undefined ? nextStageOnPass : existingStage.nextStageOnPass,
-        nextStageOnFail: nextStageOnFail !== undefined ? nextStageOnFail : existingStage.nextStageOnFail,
-        flowiseConfig: flowiseConfig !== undefined ? flowiseConfig : existingStage.flowiseConfig,
+        stageOrder: stageOrder ?? existingStage.stageOrder,
+        name: name ?? existingStage.name,
+        promptTemplate: promptTemplate ?? existingStage.promptTemplate,
+        modelId: modelId ?? existingStage.modelId,
+        validationType: validationType ?? existingStage.validationType,
+        validationCriteria: validationCriteria ?? existingStage.validationCriteria,
+        outputVariables: outputVariables ?? existingStage.outputVariables,
+        inputVariableMapping: inputVariableMapping ?? existingStage.inputVariableMapping,
+        retryLimit: retryLimit ?? existingStage.retryLimit,
+        nextStageOnPass: nextStageOnPass ?? existingStage.nextStageOnPass,
+        nextStageOnFail: nextStageOnFail ?? existingStage.nextStageOnFail,
+        flowiseConfig: flowiseConfig ?? existingStage.flowiseConfig,
       },
     });
 
@@ -126,8 +132,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
   } catch (error: any) {
     console.error(`Error updating stage ${params.stageId} for workflow ${params.workflowId}:`, error);
     if (error.code === 'P2002' && error.meta?.target?.includes('workflowId') && error.meta?.target?.includes('stageOrder')) {
-      const conflictingOrder = body?.stageOrder ?? 'provided';
-      return NextResponse.json({ error: `Stage with order ${conflictingOrder} already exists in this workflow.` }, { status: 409 });
+      return NextResponse.json({ error: 'Stage order conflict' }, { status: 409 });
     }
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
@@ -143,13 +148,12 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Verify user owns the parent workflow
-    const isOwner = await verifyWorkflowOwnership(userId, workflowId);
-    if (!isOwner) {
+    // First verify workflow ownership
+    if (!await verifyWorkflowOwnership(userId, workflowId)) {
       return NextResponse.json({ error: 'Workflow not found or access denied' }, { status: 404 });
     }
 
-    // Use deleteMany with workflowId and stageId to ensure it belongs to the correct workflow
+    // Delete the stage, ensuring it belongs to the specified workflow
     const deleteResult = await prisma.stage.deleteMany({
       where: {
         id: stageId,
@@ -158,14 +162,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     });
 
     if (deleteResult.count === 0) {
-      // Stage either didn't exist or didn't belong to the specified workflow
       return NextResponse.json({ error: 'Stage not found' }, { status: 404 });
     }
 
-    // TODO: Consider re-ordering subsequent stages if necessary, or handle gaps in stageOrder
-
-    return NextResponse.json({ message: 'Stage deleted successfully' }, { status: 200 }); // Or 204 No Content
-
+    return NextResponse.json({ message: 'Stage deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error(`Error deleting stage ${params.stageId} for workflow ${params.workflowId}:`, error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

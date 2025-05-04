@@ -1,18 +1,19 @@
 // src/hooks/useWorkflows.ts
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@clerk/nextjs';
 import {
     fetchWorkflows,
     fetchWorkflowDetail,
     startWorkflowExecution,
     fetchExecutions,
     fetchExecutionLogs,
-    updateWorkflow, // Added
-    deleteWorkflow, // Added
-    updateStage,    // Added
-    deleteStage,    // Added
+    updateWorkflow,
+    deleteWorkflow,
+    updateStage,
+    deleteStage,
     WorkflowSummary,
     WorkflowDetail,
-    StageDetail,    // Added
+    StageDetail,
     ExecutionSummary,
     ExecutionLog,
 } from '@/services/apiClient'; // Adjust path if needed
@@ -39,140 +40,151 @@ export const executionKeys = {
 
 // Hook to fetch the list of all workflows (summary)
 export function useGetWorkflows() {
+  const { getToken } = useAuth();
   return useQuery<WorkflowSummary[], Error>({
     queryKey: workflowKeys.lists(),
-    queryFn: fetchWorkflows,
-    staleTime: 5 * 60 * 1000, // Example: Data is considered fresh for 5 minutes
-    // Add other options like `refetchOnWindowFocus: false` if needed
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchWorkflows(token);
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }
 
 // Hook to fetch the detailed information for a specific workflow
 export function useGetWorkflowDetail(workflowId: string | null | undefined) {
-    return useQuery<WorkflowDetail, Error>({
-        queryKey: workflowKeys.detail(workflowId!), // The '!' asserts workflowId is non-null when enabled
-        queryFn: () => fetchWorkflowDetail(workflowId!),
-        enabled: !!workflowId, // Only run the query if workflowId is a truthy value (not null, undefined, or empty string)
-        staleTime: 10 * 60 * 1000, // Example: Details might be fresher longer
-    });
+  const { getToken } = useAuth();
+  return useQuery<WorkflowDetail, Error>({
+    queryKey: workflowKeys.detail(workflowId!),
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchWorkflowDetail(workflowId!, token);
+    },
+    enabled: !!workflowId,
+    staleTime: 10 * 60 * 1000,
+  });
 }
 
 // Hook for updating workflow metadata (Mutation)
 export function useUpdateWorkflow() {
-    const queryClient = useQueryClient();
-    return useMutation<
-        WorkflowDetail, // Return type
-        Error,          // Error type
-        { workflowId: string; data: Partial<Pick<WorkflowDetail, 'name' | 'description' | 'globalInputSchema'>> } // Input variables
-    >({
-        mutationFn: ({ workflowId, data }) => updateWorkflow(workflowId, data),
-        onSuccess: (updatedWorkflow) => {
-            console.log('Workflow updated successfully:', updatedWorkflow);
-            // Invalidate both the list and the specific detail query
-            queryClient.invalidateQueries({ queryKey: workflowKeys.lists() });
-            queryClient.invalidateQueries({ queryKey: workflowKeys.detail(updatedWorkflow.id) });
-            // Optionally update the cache directly
-            queryClient.setQueryData(workflowKeys.detail(updatedWorkflow.id), updatedWorkflow);
-        },
-        onError: (error, variables) => {
-            console.error(`Error updating workflow ${variables.workflowId}:`, error);
-            // Add user feedback (e.g., toast)
-        },
-    });
+  const queryClient = useQueryClient();
+  const { getToken } = useAuth();
+  return useMutation<
+    WorkflowDetail,
+    Error,
+    { workflowId: string; data: Partial<Pick<WorkflowDetail, 'name' | 'description' | 'globalInputSchema'>> }
+  >({
+    mutationFn: async ({ workflowId, data }) => {
+      const token = await getToken();
+      return updateWorkflow(workflowId, data, token);
+    },
+    onSuccess: (updatedWorkflow) => {
+      queryClient.invalidateQueries({ queryKey: workflowKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: workflowKeys.detail(updatedWorkflow.id) });
+      queryClient.setQueryData(workflowKeys.detail(updatedWorkflow.id), updatedWorkflow);
+    },
+    onError: (error, variables) => {
+      console.error(`Error updating workflow ${variables.workflowId}:`, error);
+    },
+  });
 }
 
 // Hook for deleting a workflow (Mutation)
 export function useDeleteWorkflow() {
-    const queryClient = useQueryClient();
-    return useMutation<
-        void,           // Return type (usually void for delete)
-        Error,          // Error type
-        string          // Input variable (workflowId)
-    >({
-        mutationFn: (workflowId) => deleteWorkflow(workflowId),
-        onSuccess: (_, workflowId) => {
-            console.log(`Workflow ${workflowId} deleted successfully`);
-            // Invalidate the workflow list
-            queryClient.invalidateQueries({ queryKey: workflowKeys.lists() });
-            // Remove the deleted workflow's detail from cache if it exists
-            queryClient.removeQueries({ queryKey: workflowKeys.detail(workflowId) });
-        },
-        onError: (error, workflowId) => {
-            console.error(`Error deleting workflow ${workflowId}:`, error);
-            // Add user feedback
-        },
-    });
+  const queryClient = useQueryClient();
+  const { getToken } = useAuth();
+  return useMutation<
+    void,
+    Error,
+    string
+  >({
+    mutationFn: async (workflowId) => {
+      const token = await getToken();
+      return deleteWorkflow(workflowId, token);
+    },
+    onSuccess: (_, workflowId) => {
+      queryClient.invalidateQueries({ queryKey: workflowKeys.lists() });
+      queryClient.removeQueries({ queryKey: workflowKeys.detail(workflowId) });
+    },
+    onError: (error, workflowId) => {
+      console.error(`Error deleting workflow ${workflowId}:`, error);
+    },
+  });
 }
 
 // Hook for updating stage details (Mutation)
 export function useUpdateStage() {
-    const queryClient = useQueryClient();
-    return useMutation<
-        StageDetail,    // Return type
-        Error,          // Error type
-        { workflowId: string; stageId: string; data: Partial<Omit<StageDetail, 'id' | 'workflowId' | 'userId' | 'createdAt' | 'updatedAt'>> } // Input variables
-    >({
-        mutationFn: ({ workflowId, stageId, data }) => updateStage(workflowId, stageId, data),
-        onSuccess: (updatedStage, variables) => {
-            console.log(`Stage ${variables.stageId} updated successfully:`, updatedStage);
-            // Invalidate the parent workflow's detail query to refetch stages
-            queryClient.invalidateQueries({ queryKey: workflowKeys.detail(variables.workflowId) });
-            // Optionally update the stage within the workflow detail cache directly (more complex)
-        },
-        onError: (error, variables) => {
-            console.error(`Error updating stage ${variables.stageId} in workflow ${variables.workflowId}:`, error);
-            // Add user feedback
-        },
-    });
+  const queryClient = useQueryClient();
+  const { getToken } = useAuth();
+  return useMutation<
+    StageDetail,
+    Error,
+    { workflowId: string; stageId: string; data: Partial<Omit<StageDetail, 'id' | 'workflowId' | 'userId' | 'createdAt' | 'updatedAt'>> }
+  >({
+    mutationFn: async ({ workflowId, stageId, data }) => {
+      const token = await getToken();
+      return updateStage(workflowId, stageId, data, token);
+    },
+    onSuccess: (updatedStage, variables) => {
+      queryClient.invalidateQueries({ queryKey: workflowKeys.detail(variables.workflowId) });
+    },
+    onError: (error, variables) => {
+      console.error(`Error updating stage ${variables.stageId} in workflow ${variables.workflowId}:`, error);
+    },
+  });
 }
 
 // Hook for deleting a stage (Mutation)
 export function useDeleteStage() {
-    const queryClient = useQueryClient();
-    return useMutation<
-        void,           // Return type
-        Error,          // Error type
-        { workflowId: string; stageId: string } // Input variables
-    >({
-        mutationFn: ({ workflowId, stageId }) => deleteStage(workflowId, stageId),
-        onSuccess: (_, variables) => {
-            console.log(`Stage ${variables.stageId} deleted successfully from workflow ${variables.workflowId}`);
-            // Invalidate the parent workflow's detail query to refetch stages
-            queryClient.invalidateQueries({ queryKey: workflowKeys.detail(variables.workflowId) });
-        },
-        onError: (error, variables) => {
-            console.error(`Error deleting stage ${variables.stageId} from workflow ${variables.workflowId}:`, error);
-            // Add user feedback
-        },
-    });
+  const queryClient = useQueryClient();
+  const { getToken } = useAuth();
+  return useMutation<
+    void,
+    Error,
+    { workflowId: string; stageId: string }
+  >({
+    mutationFn: async ({ workflowId, stageId }) => {
+      const token = await getToken();
+      return deleteStage(workflowId, stageId, token);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: workflowKeys.detail(variables.workflowId) });
+    },
+    onError: (error, variables) => {
+      console.error(`Error deleting stage ${variables.stageId} from workflow ${variables.workflowId}:`, error);
+    },
+  });
 }
-
 
 // Hook to fetch the list of executions (summary), optionally filtered by workflowId
 export function useGetExecutions(workflowId?: string) {
-    const queryFilter = workflowId ? { workflowId } : 'all'; // Use 'all' or specific ID for key
-    return useQuery<ExecutionSummary[], Error>({
-        queryKey: executionKeys.list(queryFilter),
-        queryFn: () => fetchExecutions(workflowId),
-        staleTime: 1 * 60 * 1000, // Executions list might change more frequently
-    });
+  const { getToken } = useAuth();
+  const queryFilter = workflowId ? { workflowId } : 'all';
+  return useQuery<ExecutionSummary[], Error>({
+    queryKey: executionKeys.list(queryFilter),
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchExecutions(workflowId, token);
+    },
+    staleTime: 1 * 60 * 1000,
+  });
 }
 
 // Hook to fetch logs for a specific execution
 export function useGetExecutionLogs(executionId: string | null | undefined) {
-    return useQuery<ExecutionLog[], Error>({
-        queryKey: executionKeys.logs(executionId!),
-        queryFn: () => fetchExecutionLogs(executionId!),
-        enabled: !!executionId,
-        staleTime: 30 * 1000, // Logs might update frequently during execution
-        refetchInterval: (query) => {
-            // Optional: Refetch logs periodically if the execution is still running
-            // This requires knowing the execution status, which might need another query or be part of ExecutionSummary
-            // const execution = queryClient.getQueryData<ExecutionSummary>(executionKeys.detail(executionId!));
-            // return execution?.status === 'running' ? 5000 : false; // Refetch every 5s if running
-            return false; // Disable interval refetching for now
-        },
-    });
+  const { getToken } = useAuth();
+  return useQuery<ExecutionLog[], Error>({
+    queryKey: executionKeys.logs(executionId!),
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchExecutionLogs(executionId!, token);
+    },
+    enabled: !!executionId,
+    staleTime: 30 * 1000,
+    refetchInterval: (query) => {
+      return false;
+    },
+  });
 }
 
 // --- Placeholder Hooks for Future Implementation --- //

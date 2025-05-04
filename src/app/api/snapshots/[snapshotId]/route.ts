@@ -12,8 +12,7 @@ interface RouteParams {
 // GET /api/snapshots/{snapshotId} - Fetch a specific snapshot (including data)
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const authResult = await auth(); // Await the auth() call
-    const userId = authResult.userId;
+    const { userId } = await auth();
     const { snapshotId } = params;
 
     if (!userId) {
@@ -42,8 +41,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 // DELETE /api/snapshots/{snapshotId} - Delete a specific snapshot
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    const authResult = await auth(); // Await the auth() call
-    const userId = authResult.userId;
+    const { userId } = await auth();
     const { snapshotId } = params;
 
     if (!userId) {
@@ -59,17 +57,12 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     });
 
     if (deleteResult.count === 0) {
-      // Snapshot either didn't exist or didn't belong to the user
       return NextResponse.json({ error: 'Snapshot not found or access denied' }, { status: 404 });
     }
 
-    return NextResponse.json({ message: 'Snapshot deleted successfully' }, { status: 200 }); // Or 204 No Content
-
+    return NextResponse.json({ message: 'Snapshot deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error(`Error deleting snapshot ${params.snapshotId}:`, error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-
-// Note: PUT for snapshots might not be common, as they represent a point-in-time backup.
-// Restoring from a snapshot would typically involve creating a *new* workflow based on it.

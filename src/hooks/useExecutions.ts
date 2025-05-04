@@ -1,15 +1,16 @@
 // src/hooks/useExecutions.ts
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'; // Added useMutation, useQueryClient
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@clerk/nextjs';
 import {
   fetchExecutions,
-  fetchExecutionDetail, // Added fetchExecutionDetail
+  fetchExecutionDetail,
   fetchExecutionLogs,
   recordManualValidation,
   retryStage,
   updateExecutionStatus,
-  startWorkflowExecution, // Added startWorkflowExecution
+  startWorkflowExecution,
   ExecutionSummary,
-  ExecutionDetail, // Added ExecutionDetail type
+  ExecutionDetail,
   ExecutionLog,
 } from '@/services/apiClient';
 
@@ -26,19 +27,26 @@ const executionKeys = {
 
 // Hook to fetch a list of execution summaries with optional filters
 export const useGetExecutions = (filters: { workflowId?: string } = {}) => {
+  const { getToken } = useAuth();
   return useQuery<ExecutionSummary[], Error>({
     queryKey: executionKeys.list(filters),
-    queryFn: () => fetchExecutions(filters.workflowId),
-    // Optional: Add staleTime, cacheTime, etc.
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchExecutions(filters.workflowId, token);
+    },
     staleTime: 1 * 60 * 1000, // 1 minute
   });
 };
 
 // Hook to fetch details for a specific execution
 export const useGetExecutionDetail = (executionId: string | null | undefined) => {
+  const { getToken } = useAuth();
   return useQuery<ExecutionDetail, Error>({
     queryKey: executionKeys.detail(executionId!),
-    queryFn: () => fetchExecutionDetail(executionId!),
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchExecutionDetail(executionId!, token);
+    },
     enabled: !!executionId,
     staleTime: 5 * 1000, // Fetch details relatively frequently if needed
   });
@@ -46,13 +54,16 @@ export const useGetExecutionDetail = (executionId: string | null | undefined) =>
 
 // Hook to fetch logs for a specific execution, with polling based on execution status
 export const useGetExecutionLogs = (executionId: string | null | undefined, options?: { enabled?: boolean }) => {
-  // Fetch execution details to determine if polling should be active
+  const { getToken } = useAuth();
   const { data: executionDetail } = useGetExecutionDetail(executionId);
   const isExecutionRunning = executionDetail?.status === 'RUNNING' || executionDetail?.status === 'PENDING';
 
   return useQuery<ExecutionLog[], Error>({
     queryKey: executionKeys.log(executionId!),
-    queryFn: () => fetchExecutionLogs(executionId!),
+    queryFn: async () => {
+      const token = await getToken();
+      return fetchExecutionLogs(executionId!, token);
+    },
     enabled: (options?.enabled ?? !!executionId) && !!executionDetail, // Only run if executionId is provided, enabled, and details are loaded
     staleTime: 10 * 1000, // Logs can be slightly stale (10s)
     refetchInterval: (query) => {
@@ -67,12 +78,16 @@ export const useGetExecutionLogs = (executionId: string | null | undefined, opti
 // Hook for recording manual validation result (Mutation)
 export const useRecordManualValidation = () => {
   const queryClient = useQueryClient();
+  const { getToken } = useAuth();
   return useMutation<
     ExecutionLog, // Return type
     Error,        // Error type
     { executionId: string; stageId: string; validationResult: 'pass' | 'fail'; comments?: string } // Updated input variables
   >({
-    mutationFn: (variables) => recordManualValidation(variables.executionId, variables.stageId, variables.validationResult),
+    mutationFn: async (variables) => {
+      const token = await getToken();
+      return recordManualValidation(variables.executionId, variables.stageId, variables.validationResult, token);
+    },
     onSuccess: (updatedLog, variables) => {
       console.log(`Manual validation recorded for stage ${variables.stageId}: ${variables.validationResult}`, updatedLog);
       // Invalidate logs for this execution to show the updated status
@@ -90,12 +105,16 @@ export const useRecordManualValidation = () => {
 // Hook for retrying a failed stage (Mutation)
 export const useRetryStage = () => {
   const queryClient = useQueryClient();
+  const { getToken } = useAuth();
   return useMutation<
     ExecutionLog, // Return type (might be different based on API, e.g., StageExecution)
     Error,        // Error type
     { executionId: string; stageId: string } // Input variables
   >({
-    mutationFn: ({ executionId, stageId }) => retryStage(executionId, stageId),
+    mutationFn: async ({ executionId, stageId }) => {
+      const token = await getToken();
+      return retryStage(executionId, stageId, token);
+    },
     onSuccess: (result, variables) => {
       console.log(`Stage ${variables.stageId} retry initiated:`, result);
       // Invalidate logs to show the new attempt
@@ -113,12 +132,16 @@ export const useRetryStage = () => {
 // Hook for updating execution status (Mutation)
 export const useUpdateExecutionStatus = () => {
   const queryClient = useQueryClient();
+  const { getToken } = useAuth();
   return useMutation<
     ExecutionSummary, // Return type
     Error,            // Error type
     { executionId: string; status: string } // Input variables
   >({
-    mutationFn: ({ executionId, status }) => updateExecutionStatus(executionId, status),
+    mutationFn: async ({ executionId, status }) => {
+      const token = await getToken();
+      return updateExecutionStatus(executionId, status, token);
+    },
     onSuccess: (updatedExecution, variables) => {
       console.log(`Execution ${variables.executionId} status updated to ${variables.status}`, updatedExecution);
       // Invalidate execution list and detail
@@ -136,25 +159,29 @@ export const useUpdateExecutionStatus = () => {
 
 // Hook for starting a workflow execution (Mutation)
 export const useStartExecution = () => {
-    const queryClient = useQueryClient();
-    return useMutation<
-        ExecutionSummary, // Type of data returned on success
-        Error,            // Type of error
-        { workflowId: string; inputs: any } // Type of variables passed to the mutation function
-    >({
-        mutationFn: ({ workflowId, inputs }) => startWorkflowExecution(workflowId, inputs),
-        onSuccess: (data) => {
-            console.log('Execution started successfully:', data);
-            // Invalidate queries related to executions list to refetch
-            queryClient.invalidateQueries({ queryKey: executionKeys.lists() });
-            // Optionally, you could pre-populate the cache for the new execution's details
-            // queryClient.setQueryData(executionKeys.detail(data.id), data);
-        },
-        onError: (error) => {
-            console.error('Error starting execution:', error);
-            // Handle error display to the user here (e.g., using a toast notification)
-        },
-    });
+  const queryClient = useQueryClient();
+  const { getToken } = useAuth();
+  return useMutation<
+    ExecutionSummary, // Type of data returned on success
+    Error,            // Type of error
+    { workflowId: string; inputs: any } // Type of variables passed to the mutation function
+  >({
+    mutationFn: async ({ workflowId, inputs }) => {
+      const token = await getToken();
+      return startWorkflowExecution(workflowId, inputs, token);
+    },
+    onSuccess: (data) => {
+      console.log('Execution started successfully:', data);
+      // Invalidate queries related to executions list to refetch
+      queryClient.invalidateQueries({ queryKey: executionKeys.lists() });
+      // Optionally, you could pre-populate the cache for the new execution's details
+      // queryClient.setQueryData(executionKeys.detail(data.id), data);
+    },
+    onError: (error) => {
+      console.error('Error starting execution:', error);
+      // Handle error display to the user here (e.g., using a toast notification)
+    },
+  });
 };
 
 // Note: Mutations for starting/stopping/retrying executions would go here
