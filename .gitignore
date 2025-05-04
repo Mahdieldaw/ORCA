@@ -1,29 +1,43 @@
-Workspace.code-workspace
-Documents
+# Build output
+.next/
+dist/
+dist-ssr/
+out/
 tsconfig.tsbuildinfo
-.next
+
+# Dependencies
+node_modules/
+
+# Local environment
 .env
+.env.local
+.env.*.local
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
+# IDE / Editor settings
+.vscode/
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Personal / workspace state
+Workspace.code-workspace
+
+# Documentation (exclude from LLM ingestion)
+Documents/
+
+# Optional: exclude GitIngest cache/temp if applicable
+.git-ingest-cache/
